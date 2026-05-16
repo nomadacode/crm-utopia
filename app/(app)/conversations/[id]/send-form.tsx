@@ -1,32 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-export function SendMessageForm({ contactId }: { contactId: string }) {
+export function SendMessageForm({
+  contactId,
+  onSend,
+  onFailed,
+}: {
+  contactId: string;
+  onSend?: (content: string) => void;
+  onFailed?: (content: string) => void;
+}) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
-  const router = useRouter();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!value.trim() || sending) return;
+    const trimmed = value.trim();
+    if (!trimmed || sending) return;
     setSending(true);
+    // Optimistic: clear input + show pending bubble immediately
+    setValue("");
+    onSend?.(trimmed);
     try {
       const res = await fetch(`/api/contacts/${contactId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: value.trim() }),
+        body: JSON.stringify({ content: trimmed }),
       });
-      if (res.ok) {
-        setValue("");
-        router.refresh();
-      } else {
-        const err = await res.json();
-        alert("Error: " + (err.error ?? "no se pudo enviar"));
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("send failed", err);
+        onFailed?.(trimmed);
       }
+      // On success, realtime INSERT will replace the pending bubble with the real one.
+    } catch (err) {
+      console.error("send threw", err);
+      onFailed?.(trimmed);
     } finally {
       setSending(false);
     }

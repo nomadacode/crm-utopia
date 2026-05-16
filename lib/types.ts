@@ -7,6 +7,7 @@ export type Contact = {
   ctwa_clid: string | null;
   blocked: boolean;
   bot_enabled: boolean;
+  typing_until: string | null;
 };
 
 export type Message = {

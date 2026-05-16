@@ -130,19 +130,46 @@ async function handleIncoming(change: IncomingChange) {
     contact = created as Contact;
   }
 
+  // Idempotency: skip if Meta already delivered this exact wamid before
+  const { data: existingMsg } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("whatsapp_message_id", msg.id)
+    .maybeSingle();
+  if (existingMsg) {
+    console.log("[handleIncoming] duplicate wamid, skipping", msg.id);
+    return;
+  }
+
   // Save user message
-  await supabase.from("messages").insert({
+  const { error: insertErr } = await supabase.from("messages").insert({
     contact_id: contact.id,
     role: "user",
     content: msg.text.body,
     whatsapp_message_id: msg.id,
   });
+  if (insertErr) {
+    // UNIQUE constraint violation = idempotency hit (concurrent delivery). Bail silently.
+    if (insertErr.code === "23505") {
+      console.log("[handleIncoming] race: another delivery already saved", msg.id);
+      return;
+    }
+    throw insertErr;
+  }
 
   // Mark as read in WhatsApp
   markAsRead(msg.id).catch(() => {});
 
   // Skip auto-reply if blocked or bot disabled
   if (contact.blocked || !contact.bot_enabled) return;
+
+  // Mark contact as "UtopIA typing..." for the realtime UI
+  await supabase
+    .from("contacts")
+    .update({
+      typing_until: new Date(Date.now() + 30_000).toISOString(),
+    })
+    .eq("id", contact.id);
 
   // Build history (last 20)
   const { data: historyRows } = await supabase
@@ -173,6 +200,10 @@ async function handleIncoming(change: IncomingChange) {
       content: reply,
       status: "failed",
     });
+    await supabase
+      .from("contacts")
+      .update({ typing_until: null })
+      .eq("id", contact.id);
     return;
   }
 
@@ -183,6 +214,12 @@ async function handleIncoming(change: IncomingChange) {
     whatsapp_message_id: wamid,
     status: "sent",
   });
+
+  // Clear typing indicator now that the reply is out
+  await supabase
+    .from("contacts")
+    .update({ typing_until: null })
+    .eq("id", contact.id);
 
   // Lead classification runs after we've responded — doesn't block Meta's webhook ack
   after(async () => {

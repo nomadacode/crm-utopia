@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
+import { ListRefresher } from "./list-refresher";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,7 @@ export default async function ConversationsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
+      <ListRefresher />
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">
           Bandeja
