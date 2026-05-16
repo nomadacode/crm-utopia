@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { ConversationControls } from "./controls";
 import { ConversationView } from "./conversation-view";
 import { LeadCard } from "./lead-card";
-import type { Message } from "@/lib/types";
+import { TagsPanel } from "./tags-panel";
+import type { Message, Tag } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +24,37 @@ export default async function ConversationPage({
     .maybeSingle();
   if (!contact) notFound();
 
-  const { data: messages } = await sb
-    .from("messages")
-    .select("*")
-    .eq("contact_id", id)
-    .order("created_at", { ascending: true });
+  // Mark as read on open (fire-and-forget, before fetching messages)
+  void sb
+    .from("contacts")
+    .update({ last_read_at: new Date().toISOString() })
+    .eq("id", id);
 
-  const { data: lead } = await sb
-    .from("leads")
-    .select("score, reason, qualified_at")
-    .eq("contact_id", id)
-    .order("qualified_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: messages }, { data: lead }, { data: allTags }, { data: assignedTags }] =
+    await Promise.all([
+      sb
+        .from("messages")
+        .select("*")
+        .eq("contact_id", id)
+        .order("created_at", { ascending: true }),
+      sb
+        .from("leads")
+        .select("score, reason, qualified_at")
+        .eq("contact_id", id)
+        .order("qualified_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      sb.from("tags").select("*").order("name"),
+      sb
+        .from("contact_tags")
+        .select("tag:tags(id, name, color, created_at)")
+        .eq("contact_id", id),
+    ]);
+
+  type TagRow = { tag: Tag | null };
+  const initialTags: Tag[] = ((assignedTags ?? []) as unknown as TagRow[])
+    .map((r) => r.tag)
+    .filter((t): t is Tag => t !== null);
 
   return (
     <div className="mx-auto grid h-[calc(100vh-4rem)] max-w-6xl grid-cols-[1fr_280px] gap-6">
@@ -51,15 +70,21 @@ export default async function ConversationPage({
         />
       </Card>
 
-      <div className="space-y-4">
+      <div className="space-y-4 overflow-y-auto">
         <LeadCard
           score={lead?.score as "hot" | "warm" | "cold" | undefined}
           reason={lead?.reason}
+        />
+        <TagsPanel
+          contactId={contact.id}
+          initialAssigned={initialTags}
+          allTags={(allTags ?? []) as Tag[]}
         />
         <ConversationControls
           contactId={contact.id}
           initialBlocked={contact.blocked}
           initialBotEnabled={contact.bot_enabled}
+          initialArchived={contact.archived_at != null}
         />
       </div>
     </div>

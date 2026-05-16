@@ -8,7 +8,28 @@ export type Contact = {
   blocked: boolean;
   bot_enabled: boolean;
   typing_until: string | null;
+  last_read_at: string | null;
+  archived_at: string | null;
 };
+
+export type Tag = {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+};
+
+export const TAG_COLORS = [
+  "gray",
+  "lime",
+  "blue",
+  "amber",
+  "violet",
+  "pink",
+  "red",
+  "cyan",
+] as const;
+export type TagColor = (typeof TAG_COLORS)[number];
 
 export type Message = {
   id: string;

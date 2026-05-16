@@ -21,13 +21,23 @@ export async function PATCH(
   const body = (await req.json()) as Partial<{
     blocked: boolean;
     bot_enabled: boolean;
+    archived: boolean;
+    mark_read: boolean;
   }>;
-  const update: Record<string, boolean> = {};
+  const update: Record<string, boolean | string | null> = {};
   if (typeof body.blocked === "boolean") update.blocked = body.blocked;
-  if (typeof body.bot_enabled === "boolean") update.bot_enabled = body.bot_enabled;
+  if (typeof body.bot_enabled === "boolean")
+    update.bot_enabled = body.bot_enabled;
+  if (typeof body.archived === "boolean")
+    update.archived_at = body.archived ? new Date().toISOString() : null;
+  if (body.mark_read) update.last_read_at = new Date().toISOString();
 
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ ok: true });
+  }
   const sb = supabaseAdmin();
   const { error } = await sb.from("contacts").update(update).eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error)
+    return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

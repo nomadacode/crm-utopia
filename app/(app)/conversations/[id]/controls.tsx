@@ -10,16 +10,23 @@ export function ConversationControls({
   contactId,
   initialBlocked,
   initialBotEnabled,
+  initialArchived,
 }: {
   contactId: string;
   initialBlocked: boolean;
   initialBotEnabled: boolean;
+  initialArchived: boolean;
 }) {
   const [blocked, setBlocked] = useState(initialBlocked);
   const [botEnabled, setBotEnabled] = useState(initialBotEnabled);
+  const [archived, setArchived] = useState(initialArchived);
   const [, startTransition] = useTransition();
 
-  function update(patch: { blocked?: boolean; bot_enabled?: boolean }) {
+  function update(patch: {
+    blocked?: boolean;
+    bot_enabled?: boolean;
+    archived?: boolean;
+  }) {
     startTransition(async () => {
       await fetch(`/api/contacts/${contactId}`, {
         method: "PATCH",
@@ -48,6 +55,18 @@ export function ConversationControls({
           }}
         />
       </div>
+
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          const next = !archived;
+          setArchived(next);
+          update({ archived: next });
+        }}
+      >
+        {archived ? "Desarchivar conversación" : "Archivar conversación"}
+      </Button>
 
       <Button
         variant={blocked ? "default" : "destructive"}
