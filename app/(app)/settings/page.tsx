@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { getSystemPrompt } from "@/lib/utopia-prompt";
-import { SettingsForm } from "./form";
+import { listPresets } from "@/lib/utopia-prompt";
+import { PresetsManager } from "./presets-manager";
 import { Card } from "@/components/ui/card";
 import { Tag } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const prompt = await getSystemPrompt();
+  const presets = await listPresets();
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-1">
@@ -16,12 +16,12 @@ export default async function SettingsPage() {
         </p>
         <h1 className="text-3xl font-medium tracking-display">Ajustes</h1>
         <p className="text-sm text-muted-foreground">
-          Personalizá el prompt que define cómo responde UtopIA.
+          Personalizá el comportamiento de UtopIA con presets de prompt.
         </p>
       </header>
 
       <Card className="rounded-lg p-6">
-        <SettingsForm initialPrompt={prompt} />
+        <PresetsManager initialPresets={presets} />
       </Card>
 
       <Link
