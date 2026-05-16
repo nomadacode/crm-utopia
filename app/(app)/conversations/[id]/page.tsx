@@ -5,7 +5,16 @@ import { ConversationControls } from "./controls";
 import { ConversationView } from "./conversation-view";
 import { LeadCard } from "./lead-card";
 import { TagsPanel } from "./tags-panel";
-import type { Message, Tag } from "@/lib/types";
+import { NotesPanel } from "./notes-panel";
+import { RemindersPanel } from "./reminders-panel";
+import { DealPanel } from "./deal-panel";
+import type {
+  ContactNote,
+  Message,
+  PipelineStage,
+  Reminder,
+  Tag,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -30,26 +39,45 @@ export default async function ConversationPage({
     .update({ last_read_at: new Date().toISOString() })
     .eq("id", id);
 
-  const [{ data: messages }, { data: lead }, { data: allTags }, { data: assignedTags }] =
-    await Promise.all([
-      sb
-        .from("messages")
-        .select("*")
-        .eq("contact_id", id)
-        .order("created_at", { ascending: true }),
-      sb
-        .from("leads")
-        .select("score, reason, qualified_at")
-        .eq("contact_id", id)
-        .order("qualified_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      sb.from("tags").select("*").order("name"),
-      sb
-        .from("contact_tags")
-        .select("tag:tags(id, name, color, created_at)")
-        .eq("contact_id", id),
-    ]);
+  const [
+    { data: messages },
+    { data: lead },
+    { data: allTags },
+    { data: assignedTags },
+    { data: notes },
+    { data: pendingReminders },
+    { data: stages },
+  ] = await Promise.all([
+    sb
+      .from("messages")
+      .select("*")
+      .eq("contact_id", id)
+      .order("created_at", { ascending: true }),
+    sb
+      .from("leads")
+      .select("score, reason, qualified_at")
+      .eq("contact_id", id)
+      .order("qualified_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    sb.from("tags").select("*").order("name"),
+    sb
+      .from("contact_tags")
+      .select("tag:tags(id, name, color, created_at)")
+      .eq("contact_id", id),
+    sb
+      .from("contact_notes")
+      .select("*")
+      .eq("contact_id", id)
+      .order("created_at", { ascending: false }),
+    sb
+      .from("reminders")
+      .select("*")
+      .eq("contact_id", id)
+      .is("dismissed_at", null)
+      .order("remind_at", { ascending: true }),
+    sb.from("pipeline_stages").select("*").order("position"),
+  ]);
 
   type TagRow = { tag: Tag | null };
   const initialTags: Tag[] = ((assignedTags ?? []) as unknown as TagRow[])
@@ -75,10 +103,25 @@ export default async function ConversationPage({
           score={lead?.score as "hot" | "warm" | "cold" | undefined}
           reason={lead?.reason}
         />
+        <DealPanel
+          contactId={contact.id}
+          initialStageId={contact.stage_id}
+          initialIndustry={contact.industry}
+          initialDealValue={contact.deal_value}
+          stages={(stages ?? []) as PipelineStage[]}
+        />
         <TagsPanel
           contactId={contact.id}
           initialAssigned={initialTags}
           allTags={(allTags ?? []) as Tag[]}
+        />
+        <RemindersPanel
+          contactId={contact.id}
+          initialReminders={(pendingReminders ?? []) as Reminder[]}
+        />
+        <NotesPanel
+          contactId={contact.id}
+          initialNotes={(notes ?? []) as ContactNote[]}
         />
         <ConversationControls
           contactId={contact.id}

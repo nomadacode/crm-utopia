@@ -3,6 +3,7 @@
     { "path": "/api/cron/notify", "schedule": "0 21 * * *" },
     { "path": "/api/cron/followup", "schedule": "0 13 * * *" },
     { "path": "/api/cron/followup", "schedule": "0 17 * * *" },
-    { "path": "/api/cron/followup", "schedule": "0 21 * * *" }
+    { "path": "/api/cron/followup", "schedule": "0 21 * * *" },
+    { "path": "/api/cron/reminders", "schedule": "*/15 * * * *" }
   ]
 }

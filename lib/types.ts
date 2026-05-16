@@ -10,6 +10,33 @@ export type Contact = {
   typing_until: string | null;
   last_read_at: string | null;
   archived_at: string | null;
+  stage_id: string | null;
+  deal_value: number | null;
+  industry: string | null;
+};
+
+export type PipelineStage = {
+  id: string;
+  name: string;
+  position: number;
+  color: string;
+  created_at: string;
+};
+
+export type ContactNote = {
+  id: string;
+  contact_id: string;
+  content: string;
+  created_at: string;
+};
+
+export type Reminder = {
+  id: string;
+  contact_id: string;
+  message: string;
+  remind_at: string;
+  dismissed_at: string | null;
+  created_at: string;
 };
 
 export type Tag = {
