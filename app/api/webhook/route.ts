@@ -24,27 +24,30 @@ export async function GET(req: NextRequest) {
 // POST — Incoming WhatsApp events (messages or statuses).
 export async function POST(req: NextRequest) {
   const body = await req.json();
+  console.log("[webhook] POST received", JSON.stringify(body).slice(0, 500));
   try {
     const entry = body?.entry?.[0];
     const change = entry?.changes?.[0]?.value;
-    if (!change) return NextResponse.json({ ok: true });
+    if (!change) {
+      console.log("[webhook] no change in payload");
+      return NextResponse.json({ ok: true });
+    }
 
-    // Status update (sent → delivered → read → failed)
     if (Array.isArray(change.statuses)) {
+      console.log("[webhook] status update", change.statuses.length);
       await handleStatuses(change.statuses);
       return NextResponse.json({ ok: true });
     }
 
-    // Incoming user message
     if (Array.isArray(change.messages)) {
-      // Respond 200 fast and process async — Meta retries if we take too long.
-      handleIncoming(change).catch((err) =>
-        console.error("[webhook] handleIncoming error", err),
-      );
+      console.log("[webhook] incoming messages", change.messages.length);
+      // Await inline — fire-and-forget gets killed by serverless before completing.
+      // Meta allows up to 20s to respond, our flow takes ~5-10s.
+      await handleIncoming(change);
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("[webhook] error", err);
+    console.error("[webhook] handler error", err);
     return NextResponse.json({ ok: true });
   }
 }
@@ -81,8 +84,15 @@ type IncomingChange = {
 async function handleIncoming(change: IncomingChange) {
   const supabase = supabaseAdmin();
   const msg = change.messages[0];
-  if (!msg) return;
-  if (msg.type !== "text" || !msg.text?.body) return;
+  if (!msg) {
+    console.log("[handleIncoming] no message");
+    return;
+  }
+  if (msg.type !== "text" || !msg.text?.body) {
+    console.log("[handleIncoming] non-text message ignored, type=", msg.type);
+    return;
+  }
+  console.log("[handleIncoming] processing from", msg.from, "body:", msg.text.body.slice(0, 50));
 
   const phone = msg.from;
   const profileName = change.contacts?.[0]?.profile?.name ?? null;
@@ -173,10 +183,11 @@ async function handleIncoming(change: IncomingChange) {
     status: "sent",
   });
 
-  // Background: lead classification after 3+ user messages
-  classifyAndMaybeNotify(contact, history).catch((err) =>
-    console.error("[webhook] classify failed", err),
-  );
+  try {
+    await classifyAndMaybeNotify(contact, history);
+  } catch (err) {
+    console.error("[handleIncoming] classify failed", err);
+  }
 }
 
 async function classifyAndMaybeNotify(contact: Contact, history: ChatMessage[]) {
