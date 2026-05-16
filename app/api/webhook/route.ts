@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateReply, classifyLead, type ChatMessage } from "@/lib/ai";
 import { sendWhatsAppMessage, markAsRead } from "@/lib/whatsapp";
@@ -8,6 +8,7 @@ import type { Contact, Message } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // GET — Meta webhook verification handshake.
 export async function GET(req: NextRequest) {
@@ -183,11 +184,14 @@ async function handleIncoming(change: IncomingChange) {
     status: "sent",
   });
 
-  try {
-    await classifyAndMaybeNotify(contact, history);
-  } catch (err) {
-    console.error("[handleIncoming] classify failed", err);
-  }
+  // Lead classification runs after we've responded — doesn't block Meta's webhook ack
+  after(async () => {
+    try {
+      await classifyAndMaybeNotify(contact, history);
+    } catch (err) {
+      console.error("[handleIncoming.after] classify failed", err);
+    }
+  });
 }
 
 async function classifyAndMaybeNotify(contact: Contact, history: ChatMessage[]) {
