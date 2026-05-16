@@ -30,12 +30,14 @@ export function ConversationControls({
   }
 
   return (
-    <Card className="space-y-4 rounded-3xl p-6">
-      <h3 className="text-sm font-medium text-muted-foreground">Controles</h3>
+    <Card className="space-y-4 rounded-lg p-5">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">
+        Controles
+      </div>
 
       <div className="flex items-center justify-between">
         <Label htmlFor="bot" className="text-sm">
-          Bot ON
+          Respuestas automáticas
         </Label>
         <Switch
           id="bot"
@@ -49,7 +51,7 @@ export function ConversationControls({
 
       <Button
         variant={blocked ? "default" : "destructive"}
-        className="w-full rounded-2xl"
+        className="w-full"
         onClick={() => {
           const next = !blocked;
           setBlocked(next);

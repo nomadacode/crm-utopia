@@ -42,19 +42,24 @@ export default function TestChatPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-3xl font-semibold tracking-tight">Test chat</h1>
-        <Badge className="rounded-full bg-accent text-accent-foreground">
-          MODO TEST
-        </Badge>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Probá a UtopIA sin gastar WhatsApp. Estos mensajes NO se guardan en la DB.
-      </p>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <header className="space-y-1">
+        <div className="flex items-center gap-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+            Sandbox
+          </p>
+          <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+            test
+          </Badge>
+        </div>
+        <h1 className="text-3xl font-medium tracking-display">Test chat</h1>
+        <p className="text-sm text-muted-foreground">
+          Probá a UtopIA sin enviar nada a WhatsApp. Los mensajes no se guardan.
+        </p>
+      </header>
 
-      <Card className="flex h-[60vh] flex-col rounded-3xl p-6">
-        <div className="flex-1 space-y-3 overflow-y-auto">
+      <Card className="flex h-[60vh] flex-col overflow-hidden rounded-lg p-0">
+        <div className="flex-1 space-y-2 overflow-y-auto px-5 py-5">
           {messages.length === 0 && (
             <p className="text-center text-sm text-muted-foreground">
               Escribí algo abajo para empezar.
@@ -66,7 +71,7 @@ export default function TestChatPage() {
               className={`flex ${m.role === "assistant" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[75%] rounded-3xl px-4 py-2 text-sm ${
+                className={`max-w-[70%] rounded-md px-3.5 py-2 text-sm leading-snug ${
                   m.role === "assistant"
                     ? "bg-foreground text-background"
                     : "bg-muted"
@@ -78,21 +83,20 @@ export default function TestChatPage() {
           ))}
           {loading && (
             <div className="flex justify-end">
-              <div className="rounded-3xl bg-muted px-4 py-2 text-sm text-muted-foreground">
-                UtopIA está escribiendo...
+              <div className="rounded-md bg-muted px-3.5 py-2 text-sm text-muted-foreground">
+                UtopIA está escribiendo…
               </div>
             </div>
           )}
         </div>
-        <form onSubmit={send} className="flex gap-2 border-t border-border pt-4">
+        <form onSubmit={send} className="flex gap-2 border-t border-border px-5 py-3">
           <Input
             placeholder="Hola, ¿cómo va?"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             disabled={loading}
-            className="rounded-2xl"
           />
-          <Button type="submit" disabled={loading} className="rounded-2xl">
+          <Button type="submit" disabled={loading}>
             Enviar
           </Button>
         </form>

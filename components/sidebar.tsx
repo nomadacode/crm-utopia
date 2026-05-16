@@ -21,18 +21,18 @@ const ITEMS = [
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-border bg-sidebar p-4">
-      <div className="mb-8 flex items-center gap-2 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-accent">
-          <Sparkles className="h-5 w-5" />
+    <aside className="flex h-screen w-56 flex-col border-r border-sidebar-border bg-sidebar px-3 py-5">
+      <div className="mb-8 flex items-center gap-2.5 px-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-background">
+          <Sparkles className="h-3.5 w-3.5" />
         </div>
-        <div>
-          <div className="font-semibold leading-tight">UtopIA</div>
-          <div className="text-xs text-muted-foreground">CRM WhatsApp</div>
+        <div className="leading-tight">
+          <div className="text-sm font-medium">UtopIA</div>
+          <div className="text-[11px] text-muted-foreground">CRM WhatsApp</div>
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav className="flex flex-1 flex-col gap-0.5">
         {ITEMS.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
@@ -42,10 +42,10 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
                 active
                   ? "bg-foreground text-background"
-                  : "text-foreground hover:bg-muted",
+                  : "text-foreground/80 hover:bg-sidebar-accent hover:text-foreground",
               )}
             >
               <Icon className="h-4 w-4" />

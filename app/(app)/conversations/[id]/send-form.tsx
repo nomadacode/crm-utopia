@@ -33,15 +33,14 @@ export function SendMessageForm({ contactId }: { contactId: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex gap-2 border-t border-border pt-4">
+    <form onSubmit={onSubmit} className="flex gap-2">
       <Input
-        placeholder="Escribir mensaje manual..."
+        placeholder="Escribir mensaje manual…"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         disabled={sending}
-        className="rounded-2xl"
       />
-      <Button type="submit" disabled={sending} className="rounded-2xl">
+      <Button type="submit" disabled={sending}>
         Enviar
       </Button>
     </form>

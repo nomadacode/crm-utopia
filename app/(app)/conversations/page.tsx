@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
@@ -65,67 +64,85 @@ async function getConversations(): Promise<Row[]> {
   }));
 }
 
-function scoreBadge(score: Row["score"]) {
-  if (score === "hot")
-    return (
-      <Badge className="rounded-full bg-accent text-accent-foreground">
-        🔥 Hot
-      </Badge>
-    );
-  if (score === "warm")
-    return <Badge className="rounded-full bg-amber-200 text-amber-900">🌤️ Warm</Badge>;
-  if (score === "cold")
-    return <Badge className="rounded-full bg-muted text-muted-foreground">❄️ Cold</Badge>;
-  return null;
+function ScoreDot({ score }: { score: Row["score"] }) {
+  if (!score) return null;
+  const cls = {
+    hot: "bg-accent",
+    warm: "bg-amber-400",
+    cold: "bg-zinc-300",
+  }[score];
+  return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls}`} />;
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  const diffMs = Date.now() - date.getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "ahora";
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 }
 
 export default async function ConversationsPage() {
   const rows = await getConversations();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Conversaciones
-        </h1>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <header className="space-y-1">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">
+          Bandeja
+        </p>
+        <h1 className="text-3xl font-medium tracking-display">Conversaciones</h1>
         <p className="text-sm text-muted-foreground">
           {rows.length} {rows.length === 1 ? "contacto" : "contactos"}
         </p>
-      </div>
+      </header>
 
       {rows.length === 0 ? (
-        <Card className="rounded-3xl p-12 text-center text-muted-foreground">
-          Todavía no hay conversaciones. Mandá un &quot;Hola&quot; al WhatsApp
-          configurado para arrancar.
+        <Card className="rounded-lg p-12 text-center text-sm text-muted-foreground">
+          Sin conversaciones todavía. Mandá un mensaje al WhatsApp configurado.
         </Card>
       ) : (
-        <div className="space-y-3">
-          {rows.map((row) => (
-            <Link key={row.id} href={`/conversations/${row.id}`}>
-              <Card className="flex items-center gap-4 rounded-3xl p-4 transition-colors hover:bg-muted/40">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted font-semibold">
-                  {(row.name ?? row.phone).slice(0, 2).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">
-                      {row.name ?? row.phone}
-                    </span>
-                    {row.blocked && (
-                      <Badge variant="destructive" className="rounded-full">
-                        bloqueado
-                      </Badge>
-                    )}
+        <Card className="overflow-hidden rounded-lg p-0">
+          <ul className="divide-y divide-border">
+            {rows.map((row) => (
+              <li key={row.id}>
+                <Link
+                  href={`/conversations/${row.id}`}
+                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                    {(row.name ?? row.phone).slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="truncate text-sm text-muted-foreground">
-                    {row.lastMessage ?? "—"}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <ScoreDot score={row.score} />
+                      <span className="truncate text-sm font-medium">
+                        {row.name ?? row.phone}
+                      </span>
+                      {row.blocked && (
+                        <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-destructive">
+                          bloq
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-sm text-muted-foreground">
+                      {row.lastMessage ?? "—"}
+                    </div>
                   </div>
-                </div>
-                <div>{scoreBadge(row.score)}</div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                  <span className="shrink-0 text-xs text-muted-foreground tabular">
+                    {formatRelative(row.lastAt)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
     </div>
   );

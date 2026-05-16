@@ -7,14 +7,17 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const prompt = await getSystemPrompt();
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Ajustes</h1>
+    <div className="mx-auto max-w-3xl space-y-8">
+      <header className="space-y-1">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">
+          Configuración
+        </p>
+        <h1 className="text-3xl font-medium tracking-display">Ajustes</h1>
         <p className="text-sm text-muted-foreground">
           Personalizá el prompt que define cómo responde UtopIA.
         </p>
-      </div>
-      <Card className="rounded-3xl p-6">
+      </header>
+      <Card className="rounded-lg p-6">
         <SettingsForm initialPrompt={prompt} />
       </Card>
     </div>

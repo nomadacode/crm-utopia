@@ -27,7 +27,7 @@ export function SettingsForm({ initialPrompt }: { initialPrompt: string }) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="prompt" className="text-sm">
+        <Label htmlFor="prompt" className="text-xs uppercase tracking-wider text-muted-foreground">
           System prompt
         </Label>
         <Textarea
@@ -35,20 +35,16 @@ export function SettingsForm({ initialPrompt }: { initialPrompt: string }) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           rows={14}
-          className="rounded-2xl font-mono text-sm leading-relaxed"
+          className="font-mono text-sm leading-relaxed"
         />
       </div>
       <div className="flex items-center gap-3">
-        <Button
-          onClick={onSave}
-          disabled={saving}
-          className="rounded-2xl bg-accent text-accent-foreground hover:bg-accent/80"
-        >
-          {saving ? "Guardando..." : "Guardar"}
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? "Guardando…" : "Guardar"}
         </Button>
         {savedAt && (
-          <span className="text-sm text-muted-foreground">
-            ✓ Guardado a las {savedAt.toLocaleTimeString("es-AR")}
+          <span className="text-sm text-muted-foreground tabular">
+            Guardado · {savedAt.toLocaleTimeString("es-AR")}
           </span>
         )}
       </div>

@@ -35,21 +35,45 @@ export default async function ConversationPage({
     .limit(1)
     .maybeSingle();
 
+  const scoreLabels: Record<"hot" | "warm" | "cold", string> = {
+    hot: "Hot",
+    warm: "Warm",
+    cold: "Cold",
+  };
+  const scoreClasses: Record<"hot" | "warm" | "cold", string> = {
+    hot: "bg-accent",
+    warm: "bg-amber-400",
+    cold: "bg-zinc-300",
+  };
+  const leadScore = lead?.score as "hot" | "warm" | "cold" | undefined;
+  const scoreLabel = leadScore ? scoreLabels[leadScore] : null;
+  const scoreClass = leadScore ? scoreClasses[leadScore] : null;
+
   return (
-    <div className="grid h-[calc(100vh-4rem)] grid-cols-[1fr_320px] gap-6">
-      <Card className="flex flex-col rounded-3xl p-6">
-        <header className="flex items-center justify-between border-b border-border pb-4">
-          <div>
-            <h1 className="text-xl font-semibold">
+    <div className="mx-auto grid h-[calc(100vh-4rem)] max-w-6xl grid-cols-[1fr_280px] gap-6">
+      <Card className="flex flex-col overflow-hidden rounded-lg p-0">
+        <header className="flex items-center gap-3 border-b border-border px-5 py-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+            {(contact.name ?? contact.phone).slice(0, 2).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">
               {contact.name ?? contact.phone}
-            </h1>
-            <p className="text-sm text-muted-foreground">{contact.phone}</p>
+            </div>
+            <div className="truncate text-xs text-muted-foreground tabular">
+              {contact.phone}
+            </div>
           </div>
         </header>
 
-        <div className="flex-1 space-y-3 overflow-y-auto py-6">
+        <div className="flex-1 space-y-2 overflow-y-auto px-5 py-6">
           {(messages ?? []).map((m) => (
-            <Bubble key={m.id} role={m.role} content={m.content} createdAt={m.created_at} />
+            <Bubble
+              key={m.id}
+              role={m.role}
+              content={m.content}
+              createdAt={m.created_at}
+            />
           ))}
           {(messages?.length ?? 0) === 0 && (
             <p className="text-center text-sm text-muted-foreground">
@@ -58,23 +82,30 @@ export default async function ConversationPage({
           )}
         </div>
 
-        <SendMessageForm contactId={contact.id} />
+        <div className="border-t border-border px-5 py-3">
+          <SendMessageForm contactId={contact.id} />
+        </div>
       </Card>
 
       <div className="space-y-4">
-        <Card className="rounded-3xl p-6">
-          <h3 className="text-sm font-medium text-muted-foreground">Lead</h3>
-          {lead ? (
+        <Card className="rounded-lg p-5">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+            Lead
+          </div>
+          {lead && scoreLabel ? (
             <>
-              <div className="mt-1 text-2xl font-semibold">
-                {lead.score === "hot" && "🔥 Hot"}
-                {lead.score === "warm" && "🌤️ Warm"}
-                {lead.score === "cold" && "❄️ Cold"}
+              <div className="mt-2 flex items-center gap-2">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${scoreClass}`}
+                />
+                <span className="text-base font-medium">{scoreLabel}</span>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">{lead.reason}</p>
+              <p className="mt-2 text-sm leading-snug text-muted-foreground">
+                {lead.reason}
+              </p>
             </>
           ) : (
-            <p className="mt-1 text-sm text-muted-foreground">Sin clasificar</p>
+            <p className="mt-2 text-sm text-muted-foreground">Sin clasificar</p>
           )}
         </Card>
 
@@ -101,14 +132,16 @@ function Bubble({
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[75%] rounded-3xl px-4 py-2 ${
+        className={`max-w-[70%] rounded-md px-3.5 py-2 ${
           mine
             ? "bg-foreground text-background"
             : "bg-muted text-foreground"
         }`}
       >
-        <div className="whitespace-pre-wrap text-sm">{content}</div>
-        <div className={`mt-1 text-[10px] opacity-60`}>
+        <div className="whitespace-pre-wrap text-sm leading-snug">
+          {content}
+        </div>
+        <div className="mt-1 text-[10px] tabular opacity-60">
           {new Date(createdAt).toLocaleString("es-AR", {
             hour: "2-digit",
             minute: "2-digit",
