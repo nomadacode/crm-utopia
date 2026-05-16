@@ -11,10 +11,26 @@ function headers() {
   };
 }
 
+// Dev-mode workaround: Meta's allowlist for Argentine numbers stores them
+// with the legacy "15" mobile prefix (e.g. 54351152333263), but webhooks
+// arrive with the WhatsApp "9" prefix (e.g. 5493512333263). The allowlist
+// check rejects the "9" form. Once the app is published, both work.
+// Format: "wa_id=outbound_format,wa_id=outbound_format"
+function applyRecipientOverride(phone: string): string {
+  const raw = process.env.WHATSAPP_RECIPIENT_OVERRIDES;
+  if (!raw) return phone;
+  for (const pair of raw.split(",")) {
+    const [from, to] = pair.split("=").map((s) => s.trim());
+    if (from === phone && to) return to;
+  }
+  return phone;
+}
+
 export async function sendWhatsAppMessage(
   to: string,
   text: string,
 ): Promise<string> {
+  to = applyRecipientOverride(to);
   const res = await fetch(endpoint("messages"), {
     method: "POST",
     headers: headers(),
