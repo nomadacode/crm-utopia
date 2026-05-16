@@ -18,7 +18,7 @@ export default function TestChatPage() {
     if (!value.trim() || loading) return;
     const userMsg: Msg = { role: "user", content: value.trim() };
     const history = [...messages, userMsg];
-    setMessages(history);
+    setMessages([...history, { role: "assistant", content: "" }]);
     setValue("");
     setLoading(true);
     try {
@@ -27,14 +27,29 @@ export default function TestChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history }),
       });
-      if (res.ok) {
-        const { reply } = await res.json();
-        setMessages([...history, { role: "assistant", content: reply }]);
-      } else {
-        setMessages([
-          ...history,
-          { role: "assistant", content: "(error generando respuesta)" },
-        ]);
+      if (!res.ok || !res.body) {
+        setMessages((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = {
+            role: "assistant",
+            content: "(error generando respuesta)",
+          };
+          return next;
+        });
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(chunk, { stream: true });
+        setMessages((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { role: "assistant", content: acc };
+          return next;
+        });
       }
     } finally {
       setLoading(false);

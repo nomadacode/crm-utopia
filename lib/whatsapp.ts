@@ -60,3 +60,30 @@ export async function markAsRead(messageId: string): Promise<void> {
     }),
   });
 }
+
+/**
+ * Download a media file by Meta media id.
+ * Two-step: first GET media metadata (returns URL), then GET the binary with auth.
+ */
+export async function downloadMedia(
+  mediaId: string,
+): Promise<{ blob: Blob; mimeType: string }> {
+  const metaRes = await fetch(`${GRAPH}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+  });
+  if (!metaRes.ok) {
+    throw new Error(
+      `WhatsApp media metadata failed (${metaRes.status}): ${await metaRes.text()}`,
+    );
+  }
+  const meta = (await metaRes.json()) as { url: string; mime_type: string };
+
+  const binRes = await fetch(meta.url, {
+    headers: { Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}` },
+  });
+  if (!binRes.ok) {
+    throw new Error(`WhatsApp media binary failed (${binRes.status})`);
+  }
+  const blob = await binRes.blob();
+  return { blob, mimeType: meta.mime_type };
+}

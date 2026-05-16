@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { generateReply, classifyLead, type ChatMessage } from "@/lib/ai";
-import { sendWhatsAppMessage, markAsRead } from "@/lib/whatsapp";
+import {
+  generateReply,
+  classifyLead,
+  classifySentiment,
+  describeImage,
+  type ChatMessage,
+} from "@/lib/ai";
+import { downloadMedia, sendWhatsAppMessage, markAsRead } from "@/lib/whatsapp";
 import { sendNotification } from "@/lib/resend";
 import { applyVariables, getSystemPrompt } from "@/lib/utopia-prompt";
+import { transcribeAudio, uploadMedia } from "@/lib/media";
 import type { Contact, Message } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +81,10 @@ type IncomingMessage = {
   timestamp: string;
   type: string;
   text?: { body: string };
+  audio?: { id: string; mime_type: string };
+  image?: { id: string; mime_type: string; caption?: string };
+  video?: { id: string; mime_type: string; caption?: string };
+  document?: { id: string; mime_type: string; filename?: string };
   referral?: { source_id?: string; ctwa_clid?: string };
 };
 
@@ -82,6 +93,74 @@ type IncomingChange = {
   contacts?: Array<{ wa_id: string; profile?: { name?: string } }>;
 };
 
+type ProcessedMessage = {
+  content: string;
+  mediaType: "audio" | "image" | "video" | "document" | null;
+  mediaUrl: string | null;
+};
+
+async function processIncomingMessage(
+  msg: IncomingMessage,
+): Promise<ProcessedMessage | null> {
+  if (msg.type === "text" && msg.text?.body) {
+    return { content: msg.text.body, mediaType: null, mediaUrl: null };
+  }
+  if (msg.type === "audio" && msg.audio?.id) {
+    try {
+      const { blob, mimeType } = await downloadMedia(msg.audio.id);
+      // Upload original for traceability
+      const ext = (mimeType.split("/")[1] ?? "ogg").split(";")[0];
+      const filename = `audio/${msg.id}.${ext}`;
+      const publicUrl = await uploadMedia(blob, filename, mimeType).catch(() => null);
+      const transcript = await transcribeAudio(blob, mimeType);
+      const content = transcript
+        ? `🎤 ${transcript}`
+        : "🎤 [audio recibido — no se pudo transcribir]";
+      return { content, mediaType: "audio", mediaUrl: publicUrl };
+    } catch (err) {
+      console.error("[audio] processing failed", err);
+      return {
+        content: "🎤 [audio recibido — error al procesar]",
+        mediaType: "audio",
+        mediaUrl: null,
+      };
+    }
+  }
+  if (msg.type === "image" && msg.image?.id) {
+    try {
+      const { blob, mimeType } = await downloadMedia(msg.image.id);
+      const ext = (mimeType.split("/")[1] ?? "jpeg").split(";")[0];
+      const filename = `image/${msg.id}.${ext}`;
+      const publicUrl = await uploadMedia(blob, filename, mimeType);
+      const description = await describeImage(publicUrl, msg.image.caption);
+      const content = msg.image.caption
+        ? `🖼️ ${msg.image.caption}\n${description}`
+        : `🖼️ ${description}`;
+      return { content, mediaType: "image", mediaUrl: publicUrl };
+    } catch (err) {
+      console.error("[image] processing failed", err);
+      return {
+        content: "🖼️ [imagen recibida — error al procesar]",
+        mediaType: "image",
+        mediaUrl: null,
+      };
+    }
+  }
+  // Unsupported types: just record an indicator so the conversation isn't blank
+  const placeholder: Record<string, string> = {
+    video: "🎥 [video recibido — formato no soportado]",
+    document: "📄 [documento recibido — formato no soportado]",
+  };
+  if (placeholder[msg.type]) {
+    return {
+      content: placeholder[msg.type],
+      mediaType: msg.type as "video" | "document",
+      mediaUrl: null,
+    };
+  }
+  return null;
+}
+
 async function handleIncoming(change: IncomingChange) {
   const supabase = supabaseAdmin();
   const msg = change.messages[0];
@@ -89,11 +168,18 @@ async function handleIncoming(change: IncomingChange) {
     console.log("[handleIncoming] no message");
     return;
   }
-  if (msg.type !== "text" || !msg.text?.body) {
-    console.log("[handleIncoming] non-text message ignored, type=", msg.type);
+  const processed = await processIncomingMessage(msg);
+  if (!processed) {
+    console.log("[handleIncoming] unsupported type, ignoring:", msg.type);
     return;
   }
-  console.log("[handleIncoming] processing from", msg.from, "body:", msg.text.body.slice(0, 50));
+  console.log(
+    "[handleIncoming] from",
+    msg.from,
+    "type=" + msg.type,
+    "content:",
+    processed.content.slice(0, 80),
+  );
 
   const phone = msg.from;
   const profileName = change.contacts?.[0]?.profile?.name ?? null;
@@ -142,12 +228,18 @@ async function handleIncoming(change: IncomingChange) {
   }
 
   // Save user message
-  const { error: insertErr } = await supabase.from("messages").insert({
-    contact_id: contact.id,
-    role: "user",
-    content: msg.text.body,
-    whatsapp_message_id: msg.id,
-  });
+  const { data: insertedUserMsg, error: insertErr } = await supabase
+    .from("messages")
+    .insert({
+      contact_id: contact.id,
+      role: "user",
+      content: processed.content,
+      whatsapp_message_id: msg.id,
+      media_type: processed.mediaType,
+      media_url: processed.mediaUrl,
+    })
+    .select("id")
+    .single();
   if (insertErr) {
     // UNIQUE constraint violation = idempotency hit (concurrent delivery). Bail silently.
     if (insertErr.code === "23505") {
@@ -249,12 +341,23 @@ async function handleIncoming(change: IncomingChange) {
     .update({ typing_until: null })
     .eq("id", contact.id);
 
-  // Lead classification runs after we've responded — doesn't block Meta's webhook ack
+  // After-response work: lead classification + sentiment
   after(async () => {
     try {
       await classifyAndMaybeNotify(contact, history);
     } catch (err) {
       console.error("[handleIncoming.after] classify failed", err);
+    }
+    if (insertedUserMsg?.id) {
+      try {
+        const sentiment = await classifySentiment(processed.content);
+        await supabase
+          .from("messages")
+          .update({ sentiment })
+          .eq("id", insertedUserMsg.id);
+      } catch (err) {
+        console.error("[handleIncoming.after] sentiment failed", err);
+      }
     }
   });
 }

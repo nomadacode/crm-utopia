@@ -109,6 +109,9 @@ export function ConversationView({
             content={m.content}
             createdAt={m.created_at}
             status={m.status}
+            mediaType={m.media_type}
+            mediaUrl={m.media_url}
+            sentiment={m.sentiment}
           />
         ))}
         {pendingMessages.map((p) => (
@@ -150,6 +153,9 @@ function Bubble({
   status,
   pending,
   failed,
+  mediaType,
+  mediaUrl,
+  sentiment,
 }: {
   role: "user" | "assistant";
   content: string;
@@ -157,10 +163,28 @@ function Bubble({
   status?: string | null;
   pending?: boolean;
   failed?: boolean;
+  mediaType?: string | null;
+  mediaUrl?: string | null;
+  sentiment?: string | null;
 }) {
   const mine = role === "assistant";
+  const sentimentDot =
+    !mine && sentiment
+      ? sentiment === "positive"
+        ? "bg-lime-500"
+        : sentiment === "negative"
+          ? "bg-rose-500"
+          : "bg-zinc-300"
+      : null;
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <div className={`flex items-end gap-1.5 ${mine ? "justify-end" : "justify-start"}`}>
+      {sentimentDot && (
+        <span
+          className={`mb-2 h-1.5 w-1.5 shrink-0 rounded-full ${sentimentDot}`}
+          aria-label={`Sentimiento ${sentiment}`}
+          title={`Sentimiento: ${sentiment}`}
+        />
+      )}
       <div
         className={`max-w-[70%] rounded-md px-3.5 py-2 ${
           mine
@@ -170,6 +194,22 @@ function Bubble({
             : "bg-muted text-foreground"
         } ${pending ? "opacity-60" : ""}`}
       >
+        {mediaType === "image" && mediaUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mediaUrl}
+            alt="adjunto"
+            className="mb-1.5 max-h-64 rounded-sm object-cover"
+          />
+        )}
+        {mediaType === "audio" && mediaUrl && (
+          <audio
+            controls
+            src={mediaUrl}
+            className="mb-1.5 max-w-full"
+            preload="none"
+          />
+        )}
         <div className="whitespace-pre-wrap text-sm leading-snug">{content}</div>
         <div className="mt-1 flex items-center gap-1.5 text-[10px] tabular opacity-60">
           {new Date(createdAt).toLocaleString("es-AR", {

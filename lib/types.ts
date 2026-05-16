@@ -39,6 +39,9 @@ export type Message = {
   created_at: string;
   whatsapp_message_id: string | null;
   status: "sent" | "delivered" | "read" | "failed" | null;
+  media_type: "audio" | "image" | "video" | "document" | null;
+  media_url: string | null;
+  sentiment: "positive" | "neutral" | "negative" | null;
 };
 
 export type LeadScore = "hot" | "warm" | "cold";

@@ -41,6 +41,76 @@ export async function generateReply(
   return reply.trim();
 }
 
+/**
+ * Describe an image with a vision-capable LLM. Returns a short description.
+ */
+export async function describeImage(
+  imageUrl: string,
+  caption?: string,
+): Promise<string> {
+  const res = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://crm-utopia.vercel.app",
+      "X-Title": "CRM UtopIA",
+    },
+    body: JSON.stringify({
+      model: process.env.VISION_MODEL ?? "openai/gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Describí brevemente (máx 30 palabras, en español argentino) qué se ve en esta imagen que mandó un cliente por WhatsApp. Si tiene texto visible, transcribilo. ${caption ? `El caption del cliente fue: "${caption}".` : ""}`,
+            },
+            {
+              type: "image_url",
+              image_url: { url: imageUrl },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Vision call failed (${res.status}): ${await res.text()}`);
+  }
+  const data = (await res.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+  return data.choices[0]?.message?.content?.trim() ?? "(no description)";
+}
+
+/**
+ * Classify sentiment of a single message. Returns positive | neutral | negative.
+ */
+export async function classifySentiment(
+  text: string,
+): Promise<"positive" | "neutral" | "negative"> {
+  const raw = await callOpenRouter([
+    {
+      role: "system",
+      content:
+        'Clasificá el sentimiento del mensaje del cliente. Respondé únicamente con un JSON {"sentiment":"positive"|"neutral"|"negative"}. Sin nada más.',
+    },
+    { role: "user", content: text },
+  ], { jsonMode: true });
+
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return "neutral";
+  try {
+    const parsed = JSON.parse(match[0]) as { sentiment?: string };
+    if (parsed.sentiment === "positive") return "positive";
+    if (parsed.sentiment === "negative") return "negative";
+    return "neutral";
+  } catch {
+    return "neutral";
+  }
+}
+
 export async function classifyLead(
   history: ChatMessage[],
 ): Promise<{ score: LeadScore; reason: string }> {
