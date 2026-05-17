@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
+import { DashboardRefresher } from "./dashboard-refresher";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-10">
+      <DashboardRefresher />
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">
           Resumen
@@ -140,7 +142,7 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      <section className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-6">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
         <Metric label="Contactos" value={d.totalContacts} />
         <Metric label="Mensajes" value={d.messagesWeek} />
         <Metric label="Hot" value={d.hot} dot="hot" />
@@ -148,13 +150,13 @@ export default async function DashboardPage() {
         <Metric label="Cold" value={d.cold} dot="cold" />
         <Link
           href="/conversations?filter=needs_human"
-          className="block bg-card px-6 py-5 transition-colors hover:bg-muted/40"
+          className="block bg-card px-4 py-4 transition-colors hover:bg-muted/40 sm:px-6 sm:py-5"
         >
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-amber-700">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
             <span>🆘 Humano</span>
           </div>
-          <div className="mt-2 text-3xl font-medium tabular tracking-display">
+          <div className="mt-2 text-2xl font-medium tabular tracking-display sm:text-3xl">
             {d.needsHuman}
           </div>
         </Link>
@@ -234,12 +236,12 @@ function Metric({
   dot?: "hot" | "warm" | "cold";
 }) {
   return (
-    <div className="bg-card px-6 py-5">
+    <div className="bg-card px-4 py-4 sm:px-6 sm:py-5">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
         {dot && <ScoreDot score={dot} size="sm" />}
         <span>{label}</span>
       </div>
-      <div className="mt-2 text-3xl font-medium tabular tracking-display">
+      <div className="mt-2 text-2xl font-medium tabular tracking-display sm:text-3xl">
         {value}
       </div>
     </div>

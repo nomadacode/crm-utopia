@@ -9,6 +9,7 @@ import { NotesPanel } from "./notes-panel";
 import { RemindersPanel } from "./reminders-panel";
 import { DealPanel } from "./deal-panel";
 import { HandoffBanner } from "./handoff-banner";
+import { InfoPanel } from "./info-panel";
 import type {
   Channel,
   ContactNote,
@@ -87,8 +88,44 @@ export default async function ConversationPage({
     .map((r) => r.tag)
     .filter((t): t is Tag => t !== null);
 
+  const panelChildren = (
+    <>
+      <LeadCard
+        score={lead?.score as "hot" | "warm" | "cold" | undefined}
+        reason={lead?.reason}
+      />
+      <DealPanel
+        contactId={contact.id}
+        initialStageId={contact.stage_id}
+        initialIndustry={contact.industry}
+        initialDealValue={contact.deal_value}
+        stages={(stages ?? []) as PipelineStage[]}
+      />
+      <TagsPanel
+        contactId={contact.id}
+        initialAssigned={initialTags}
+        allTags={(allTags ?? []) as Tag[]}
+      />
+      <RemindersPanel
+        contactId={contact.id}
+        initialReminders={(pendingReminders ?? []) as Reminder[]}
+      />
+      <NotesPanel
+        contactId={contact.id}
+        initialNotes={(notes ?? []) as ContactNote[]}
+      />
+      <ConversationControls
+        contactId={contact.id}
+        initialBlocked={contact.blocked}
+        initialBotEnabled={contact.bot_enabled}
+        initialArchived={contact.archived_at != null}
+        initialNeedsHuman={contact.needs_human}
+      />
+    </>
+  );
+
   return (
-    <div className="mx-auto flex h-[calc(100vh-4rem)] max-w-6xl flex-col gap-3">
+    <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-6xl flex-col gap-3 md:h-[calc(100vh-4rem)]">
       {contact.needs_human && contact.escalated_at && contact.escalation_reason && (
         <HandoffBanner
           contactId={contact.id}
@@ -96,7 +133,7 @@ export default async function ConversationPage({
           escalatedAt={contact.escalated_at}
         />
       )}
-      <div className="grid flex-1 min-h-0 grid-cols-[1fr_280px] gap-6">
+      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[1fr_280px]">
         <Card className="flex flex-col overflow-hidden rounded-lg p-0">
           <ConversationView
             initialContact={{
@@ -109,40 +146,7 @@ export default async function ConversationPage({
             initialMessages={(messages ?? []) as Message[]}
           />
         </Card>
-
-      <div className="space-y-4 overflow-y-auto">
-        <LeadCard
-          score={lead?.score as "hot" | "warm" | "cold" | undefined}
-          reason={lead?.reason}
-        />
-        <DealPanel
-          contactId={contact.id}
-          initialStageId={contact.stage_id}
-          initialIndustry={contact.industry}
-          initialDealValue={contact.deal_value}
-          stages={(stages ?? []) as PipelineStage[]}
-        />
-        <TagsPanel
-          contactId={contact.id}
-          initialAssigned={initialTags}
-          allTags={(allTags ?? []) as Tag[]}
-        />
-        <RemindersPanel
-          contactId={contact.id}
-          initialReminders={(pendingReminders ?? []) as Reminder[]}
-        />
-        <NotesPanel
-          contactId={contact.id}
-          initialNotes={(notes ?? []) as ContactNote[]}
-        />
-        <ConversationControls
-          contactId={contact.id}
-          initialBlocked={contact.blocked}
-          initialBotEnabled={contact.bot_enabled}
-          initialArchived={contact.archived_at != null}
-          initialNeedsHuman={contact.needs_human}
-        />
-        </div>
+        <InfoPanel>{panelChildren}</InfoPanel>
       </div>
     </div>
   );
