@@ -12,6 +12,79 @@ export type PromptPreset = {
   updated_at: string;
 };
 
+export type BusinessProfile = {
+  business_name: string | null;
+  description: string | null;
+  services: string | null;
+  prices: string | null;
+  hours: string | null;
+  calendar_link: string | null;
+  handoff_info: string | null;
+  additional_context: string | null;
+  updated_at: string;
+};
+
+export const BUSINESS_PROFILE_FIELDS: Array<{
+  key: keyof Omit<BusinessProfile, "updated_at">;
+  label: string;
+  placeholder: string;
+  rows: number;
+}> = [
+  {
+    key: "business_name",
+    label: "Nombre del negocio",
+    placeholder: "Ej: Estudio Vaitty",
+    rows: 1,
+  },
+  {
+    key: "description",
+    label: "Descripción breve",
+    placeholder:
+      "Una oración corta sobre qué hace tu negocio. Ej: \"Agencia de marketing especializada en automatizaciones con IA para pymes.\"",
+    rows: 2,
+  },
+  {
+    key: "services",
+    label: "Servicios que ofrecés",
+    placeholder:
+      "Listá tus servicios principales. Ej:\n- Diseño web y landing pages\n- Implementación de chatbots\n- Automatizaciones con n8n",
+    rows: 5,
+  },
+  {
+    key: "prices",
+    label: "Precios o rangos",
+    placeholder:
+      "Texto libre. Ej:\nLanding page: desde USD 800\nChatbot WhatsApp: desde USD 1500 + mantenimiento mensual\n(podés decir 'a consultar' si preferís no exponer precios)",
+    rows: 4,
+  },
+  {
+    key: "hours",
+    label: "Horarios de atención",
+    placeholder: "Ej: Lunes a viernes 9 a 18hs (Argentina). Sábados y domingos cerrado.",
+    rows: 2,
+  },
+  {
+    key: "calendar_link",
+    label: "Link de calendario / agendamiento",
+    placeholder: "https://calendly.com/tu-usuario/reunion-30min",
+    rows: 1,
+  },
+  {
+    key: "handoff_info",
+    label: "Qué hacer si hay que derivar a un humano",
+    placeholder:
+      "Ej: \"Un humano del equipo escribe en breve.\" (Si querés que UtopIA pase tu teléfono o email, escribilo acá. Si lo dejás en blanco, solo dice que un humano contacta.)",
+    rows: 2,
+  },
+  {
+    key: "additional_context",
+    label: "Contexto adicional",
+    placeholder:
+      "Todo lo que UtopIA debería saber y no entra arriba: tono de marca, valores, palabras prohibidas, promos vigentes, FAQ, etc.",
+    rows: 5,
+  },
+];
+
 export async function getActivePreset(): Promise<PromptPreset | null> {
   const supabase = supabaseAdmin();
   const { data } = await supabase
@@ -34,6 +107,80 @@ export async function listPresets(): Promise<PromptPreset[]> {
 export async function getSystemPrompt(): Promise<string> {
   const preset = await getActivePreset();
   return preset?.system_prompt ?? FALLBACK_PROMPT;
+}
+
+export async function getBusinessProfile(): Promise<BusinessProfile | null> {
+  const supabase = supabaseAdmin();
+  const { data } = await supabase
+    .from("business_profile")
+    .select(
+      "business_name, description, services, prices, hours, calendar_link, handoff_info, additional_context, updated_at",
+    )
+    .eq("id", 1)
+    .maybeSingle();
+  return (data as BusinessProfile | null) ?? null;
+}
+
+export async function updateBusinessProfile(
+  patch: Partial<Omit<BusinessProfile, "updated_at">>,
+): Promise<BusinessProfile> {
+  const supabase = supabaseAdmin();
+  const { data, error } = await supabase
+    .from("business_profile")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+    .select("*")
+    .single();
+  if (error || !data) throw error ?? new Error("update business_profile failed");
+  return data as BusinessProfile;
+}
+
+/** Build a human-readable context block from the business profile. */
+export function formatBusinessContext(profile: BusinessProfile | null): string {
+  if (!profile) return "";
+  const parts: string[] = [];
+  if (profile.business_name?.trim())
+    parts.push(`Nombre del negocio: ${profile.business_name.trim()}`);
+  if (profile.description?.trim())
+    parts.push(`Descripción: ${profile.description.trim()}`);
+  if (profile.services?.trim())
+    parts.push(`Servicios que ofrece:\n${profile.services.trim()}`);
+  if (profile.prices?.trim())
+    parts.push(`Precios:\n${profile.prices.trim()}`);
+  if (profile.hours?.trim())
+    parts.push(`Horarios: ${profile.hours.trim()}`);
+  if (profile.calendar_link?.trim())
+    parts.push(
+      `Link para agendar (usalo SOLO cuando el cliente muestre interés real concreto, nunca lo ofrezcas sin que pregunten): ${profile.calendar_link.trim()}`,
+    );
+  if (profile.handoff_info?.trim())
+    parts.push(
+      `Si tenés que derivar a un humano, comunicá esto: ${profile.handoff_info.trim()}`,
+    );
+  if (profile.additional_context?.trim())
+    parts.push(`Información adicional:\n${profile.additional_context.trim()}`);
+  if (parts.length === 0) return "";
+  return `INFORMACIÓN DEL NEGOCIO (usá estos datos como referencia. Nunca inventes información que no esté acá. Si el cliente pregunta algo que no está acá, decí que un humano del equipo le confirma):\n\n${parts.join("\n\n")}`;
+}
+
+/**
+ * Build the final system prompt: business context + active preset, with
+ * per-contact variables applied.
+ */
+export async function buildSystemPrompt(
+  contact: Pick<Contact, "name" | "phone"> & {
+    tags?: string[];
+    lastUserMessageAt?: string | null;
+  },
+): Promise<string> {
+  const [presetTemplate, profile] = await Promise.all([
+    getSystemPrompt(),
+    getBusinessProfile(),
+  ]);
+  const businessBlock = formatBusinessContext(profile);
+  const personalityWithVars = applyVariables(presetTemplate, contact);
+  if (!businessBlock) return personalityWithVars;
+  return `${businessBlock}\n\n---\n\n${personalityWithVars}`;
 }
 
 /** Replace {{variables}} in the prompt with values from the contact + context. */

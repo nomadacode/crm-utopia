@@ -1,13 +1,21 @@
 import Link from "next/link";
-import { listPresets } from "@/lib/utopia-prompt";
+import {
+  listPresets,
+  getBusinessProfile,
+} from "@/lib/utopia-prompt";
 import { PresetsManager } from "./presets-manager";
+import { BusinessForm } from "./business-form";
 import { Card } from "@/components/ui/card";
-import { Tag } from "lucide-react";
+import { Building2, Tag } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const presets = await listPresets();
+  const [presets, businessProfile] = await Promise.all([
+    listPresets(),
+    getBusinessProfile(),
+  ]);
+
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="space-y-1">
@@ -16,13 +24,26 @@ export default async function SettingsPage() {
         </p>
         <h1 className="text-3xl font-medium tracking-display">Ajustes</h1>
         <p className="text-sm text-muted-foreground">
-          Personalizá el comportamiento de UtopIA con presets de prompt.
+          Personalizá el comportamiento de UtopIA y la información que usa para responder.
         </p>
       </header>
 
-      <Card className="rounded-lg p-6">
-        <PresetsManager initialPresets={presets} />
-      </Card>
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Información del negocio</h2>
+        </div>
+        <Card className="rounded-lg p-6">
+          <BusinessForm initialProfile={businessProfile} />
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium">Personalidad y reglas (presets)</h2>
+        <Card className="rounded-lg p-6">
+          <PresetsManager initialPresets={presets} />
+        </Card>
+      </section>
 
       <Link
         href="/settings/tags"

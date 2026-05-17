@@ -9,7 +9,7 @@ import {
 } from "@/lib/ai";
 import { downloadMedia, sendWhatsAppMessage, markAsRead } from "@/lib/whatsapp";
 import { sendNotification } from "@/lib/resend";
-import { applyVariables, getSystemPrompt } from "@/lib/utopia-prompt";
+import { buildSystemPrompt } from "@/lib/utopia-prompt";
 import { transcribeAudio, uploadMedia } from "@/lib/media";
 import {
   checkMessageContent,
@@ -361,30 +361,28 @@ async function handleIncoming(change: IncomingChange) {
       .reverse()
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-  // Generate UtopIA reply — load preset + apply per-contact variables
-  const [systemPromptTemplate, { data: tagRows }, { data: prevUserMsg }] =
-    await Promise.all([
-      getSystemPrompt(),
-      supabase
-        .from("contact_tags")
-        .select("tag:tags(name)")
-        .eq("contact_id", contact.id),
-      supabase
-        .from("messages")
-        .select("created_at")
-        .eq("contact_id", contact.id)
-        .eq("role", "user")
-        .order("created_at", { ascending: false })
-        .range(1, 1)
-        .maybeSingle(),
-    ]);
+  // Build final system prompt: business profile + active preset + contact variables
+  const [{ data: tagRows }, { data: prevUserMsg }] = await Promise.all([
+    supabase
+      .from("contact_tags")
+      .select("tag:tags(name)")
+      .eq("contact_id", contact.id),
+    supabase
+      .from("messages")
+      .select("created_at")
+      .eq("contact_id", contact.id)
+      .eq("role", "user")
+      .order("created_at", { ascending: false })
+      .range(1, 1)
+      .maybeSingle(),
+  ]);
 
   type TagRef = { tag: { name: string } | null };
   const contactTagNames = ((tagRows ?? []) as unknown as TagRef[])
     .map((r) => r.tag?.name)
     .filter((n): n is string => Boolean(n));
 
-  const systemPrompt = applyVariables(systemPromptTemplate, {
+  const systemPrompt = await buildSystemPrompt({
     name: contact.name,
     phone: contact.phone,
     tags: contactTagNames,
