@@ -33,7 +33,7 @@ export const BUSINESS_PROFILE_FIELDS: Array<{
   {
     key: "business_name",
     label: "Nombre del negocio",
-    placeholder: "Ej: Estudio Vaitty",
+    placeholder: "El nombre con el que querés que UtopIA se refiera a tu negocio",
     rows: 1,
   },
   {
