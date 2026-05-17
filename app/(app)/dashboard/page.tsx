@@ -10,6 +10,7 @@ type DashboardData = {
   hot: number;
   warm: number;
   cold: number;
+  needsHuman: number;
   recentLeads: RecentLead[];
   recentConversations: RecentConv[];
 };
@@ -36,14 +37,24 @@ async function getData(): Promise<DashboardData> {
   const supabase = supabaseAdmin();
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [contactsRes, messagesRes, leadsRes, recentLeadsRes, recentMsgsRes] =
-    await Promise.all([
+  const [
+    contactsRes,
+    messagesRes,
+    leadsRes,
+    needsHumanRes,
+    recentLeadsRes,
+    recentMsgsRes,
+  ] = await Promise.all([
       supabase.from("contacts").select("id", { count: "exact", head: true }),
       supabase
         .from("messages")
         .select("id", { count: "exact", head: true })
         .gte("created_at", since),
       supabase.from("leads").select("score").gte("qualified_at", since),
+      supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("needs_human", true),
       supabase
         .from("leads")
         .select(
@@ -108,6 +119,7 @@ async function getData(): Promise<DashboardData> {
     hot: leads.filter((l) => l.score === "hot").length,
     warm: leads.filter((l) => l.score === "warm").length,
     cold: leads.filter((l) => l.score === "cold").length,
+    needsHuman: needsHumanRes.count ?? 0,
     recentLeads,
     recentConversations,
   };
@@ -128,12 +140,24 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      <section className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
+      <section className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-6">
         <Metric label="Contactos" value={d.totalContacts} />
         <Metric label="Mensajes" value={d.messagesWeek} />
         <Metric label="Hot" value={d.hot} dot="hot" />
         <Metric label="Warm" value={d.warm} dot="warm" />
         <Metric label="Cold" value={d.cold} dot="cold" />
+        <Link
+          href="/conversations?filter=needs_human"
+          className="block bg-card px-6 py-5 transition-colors hover:bg-muted/40"
+        >
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-amber-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            <span>🆘 Humano</span>
+          </div>
+          <div className="mt-2 text-3xl font-medium tabular tracking-display">
+            {d.needsHuman}
+          </div>
+        </Link>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">

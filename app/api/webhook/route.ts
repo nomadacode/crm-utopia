@@ -3,10 +3,16 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import {
   generateReply,
   classifyLead,
+  classifyHandoffNeed,
   classifySentiment,
   describeImage,
   type ChatMessage,
 } from "@/lib/ai";
+import {
+  escalateContact,
+  notifyOwnerOfHandoff,
+  sendHandoffAck,
+} from "@/lib/handoff";
 import { downloadMedia, sendWhatsAppMessage, markAsRead } from "@/lib/whatsapp";
 import { sendNotification } from "@/lib/resend";
 import { buildSystemPrompt } from "@/lib/utopia-prompt";
@@ -262,8 +268,8 @@ async function handleIncoming(change: IncomingChange) {
   // Mark as read in WhatsApp
   markAsRead(msg.id).catch(() => {});
 
-  // Skip auto-reply if blocked or bot disabled
-  if (contact.blocked || !contact.bot_enabled) return;
+  // Hard stop: blocked contacts get NO further processing (no reply, no handoff)
+  if (contact.blocked) return;
 
   // Security Layer 2: if content was flagged, send hardcoded deflection (no LLM)
   if (!contentCheck.allowed) {
@@ -319,6 +325,36 @@ async function handleIncoming(change: IncomingChange) {
     }
     return;
   }
+
+  // Handoff check: only when the contact is not already escalated
+  if (!contact.needs_human) {
+    const handoff = await classifyHandoffNeed(processed.content);
+    if (handoff.kind === "explicit_request" || handoff.kind === "frustration") {
+      const reason = handoff.kind;
+      console.log(
+        "[handoff] escalating contact",
+        contact.phone,
+        "reason:",
+        reason,
+      );
+      const { wasAlreadyEscalated } = await escalateContact(
+        supabase,
+        contact.id,
+        reason,
+      );
+      if (!wasAlreadyEscalated) {
+        await sendHandoffAck(supabase, contact);
+        after(() =>
+          notifyOwnerOfHandoff(contact, reason, processed.content),
+        );
+      }
+      return; // Do not call the LLM for an escalated contact
+    }
+  }
+
+  // Skip LLM reply if bot is paused (manually or via prior escalation that wasn't reflected
+  // in this in-memory contact yet). The handoff check above already handles a fresh escalation.
+  if (contact.needs_human || !contact.bot_enabled) return;
 
   // Security Layer 4: daily budget cap (prevents wallet drain)
   const budgetCheck = await checkDailyBudget(supabase);

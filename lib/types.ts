@@ -1,3 +1,5 @@
+export type EscalationReason = "explicit_request" | "frustration" | "manual";
+
 export type Contact = {
   id: string;
   phone: string;
@@ -13,6 +15,9 @@ export type Contact = {
   stage_id: string | null;
   deal_value: number | null;
   industry: string | null;
+  needs_human: boolean;
+  escalated_at: string | null;
+  escalation_reason: EscalationReason | null;
 };
 
 export type PipelineStage = {
