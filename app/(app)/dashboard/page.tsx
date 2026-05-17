@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
+import { DashboardRefresher } from "./dashboard-refresher";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-10">
+      <DashboardRefresher />
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">
           Resumen

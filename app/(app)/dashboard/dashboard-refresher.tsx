@@ -5,11 +5,10 @@ import { useEffect, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 /**
- * Subscribes to new messages and triggers a router.refresh() when one arrives,
- * so the conversations list reflects new activity without a manual reload.
- * Debounced to 500ms to avoid hammering on burst inserts.
+ * Refresca el dashboard cuando llegan mensajes o leads nuevos.
+ * Debounced para evitar refrescos en cascada.
  */
-export function ListRefresher() {
+export function DashboardRefresher() {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -19,26 +18,27 @@ export function ListRefresher() {
     let channelRef: ReturnType<typeof supabase.channel> | null = null;
 
     (async () => {
-      // Ensure auth is loaded so realtime uses the authenticated role
       try {
         const { data } = await supabase.auth.getSession();
         if (data.session?.access_token) {
           supabase.realtime.setAuth(data.session.access_token);
         }
       } catch (err) {
-        console.error("[list-refresher] auth setup failed", err);
+        console.error("[dashboard-refresher] auth setup failed", err);
       }
       if (cancelled) return;
 
+      const schedule = () => {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => router.refresh(), 1000);
+      };
+
       channelRef = supabase
-        .channel("conversations-list")
+        .channel("dashboard")
         .on(
           "postgres_changes" as never,
           { event: "INSERT", schema: "public", table: "messages" },
-          () => {
-            if (timer.current) clearTimeout(timer.current);
-            timer.current = setTimeout(() => router.refresh(), 500);
-          },
+          schedule,
         )
         .subscribe();
     })();
