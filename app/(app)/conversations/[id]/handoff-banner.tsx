@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -12,8 +12,8 @@ const REASON_LABEL: Record<EscalationReason, string> = {
   manual: "Escalado manualmente desde el CRM",
 };
 
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
+function timeAgo(iso: string, now: number): string {
+  const diffMs = now - new Date(iso).getTime();
   const min = Math.floor(diffMs / 60_000);
   if (min < 1) return "recién";
   if (min < 60) return `hace ${min} min`;
@@ -21,6 +21,17 @@ function timeAgo(iso: string): string {
   if (h < 24) return `hace ${h}h`;
   const d = Math.floor(h / 24);
   return `hace ${d}d`;
+}
+
+/** Client-only "now" — avoids server/client hydration mismatch on relative times. */
+function useClientNow(refreshMs = 60_000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), refreshMs);
+    return () => clearInterval(t);
+  }, [refreshMs]);
+  return now;
 }
 
 export function HandoffBanner({
@@ -35,6 +46,7 @@ export function HandoffBanner({
   const [resolving, setResolving] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
+  const now = useClientNow();
 
   async function resolve() {
     setResolving(true);
@@ -58,8 +70,9 @@ export function HandoffBanner({
           Este contacto necesita atención humana
         </p>
         <p className="mt-0.5 text-xs text-amber-800">
-          {REASON_LABEL[reason]} · escalado {timeAgo(escalatedAt)}. UtopIA quedó
-          pausada hasta que marques como atendido.
+          {REASON_LABEL[reason]}
+          {now != null && <> · escalado {timeAgo(escalatedAt, now)}</>}.{" "}
+          UtopIA quedó pausada hasta que marques como atendido.
         </p>
       </div>
       <Button
