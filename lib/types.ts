@@ -1,3 +1,5 @@
+export type Channel = "whatsapp" | "telegram";
+
 export type EscalationReason = "explicit_request" | "frustration" | "manual";
 
 export type Contact = {
@@ -18,6 +20,7 @@ export type Contact = {
   needs_human: boolean;
   escalated_at: string | null;
   escalation_reason: EscalationReason | null;
+  channel: Channel;
 };
 
 export type PipelineStage = {
@@ -75,6 +78,7 @@ export type Message = {
   media_url: string | null;
   sentiment: "positive" | "neutral" | "negative" | null;
   flagged_reason: string | null;
+  channel: Channel | null;
 };
 
 export type LeadScore = "hot" | "warm" | "cold";

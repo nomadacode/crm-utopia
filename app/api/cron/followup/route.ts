@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { generateReply, type ChatMessage } from "@/lib/ai";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendChannelMessage } from "@/lib/channels/dispatch";
 import { getSystemPrompt } from "@/lib/utopia-prompt";
+import type { Channel } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   const supabase = supabaseAdmin();
   const { data: contacts } = await supabase
     .from("contacts")
-    .select("id, phone, name, blocked, bot_enabled")
+    .select("id, phone, name, blocked, bot_enabled, channel")
     .eq("blocked", false)
     .eq("bot_enabled", true);
 
@@ -87,13 +88,15 @@ export async function GET(req: NextRequest) {
         ...history,
         followupInstruction,
       ]);
-      const wamid = await sendWhatsAppMessage(contact.phone, reply);
+      const channel = (contact.channel ?? "whatsapp") as Channel;
+      const externalId = await sendChannelMessage(channel, contact.phone, reply);
       await supabase.from("messages").insert({
         contact_id: contact.id,
         role: "assistant",
         content: reply,
-        whatsapp_message_id: wamid,
+        whatsapp_message_id: externalId,
         status: "sent",
+        channel,
       });
       sentCount++;
     } catch (err) {
