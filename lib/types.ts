@@ -69,6 +69,7 @@ export type Message = {
   media_type: "audio" | "image" | "video" | "document" | null;
   media_url: string | null;
   sentiment: "positive" | "neutral" | "negative" | null;
+  flagged_reason: string | null;
 };
 
 export type LeadScore = "hot" | "warm" | "cold";
