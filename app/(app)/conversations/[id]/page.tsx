@@ -10,6 +10,7 @@ import { RemindersPanel } from "./reminders-panel";
 import { DealPanel } from "./deal-panel";
 import { HandoffBanner } from "./handoff-banner";
 import { InfoPanel } from "./info-panel";
+import { ProfilePanel } from "./profile-panel";
 import type {
   Channel,
   ContactNote,
@@ -93,6 +94,20 @@ export default async function ConversationPage({
       <LeadCard
         score={lead?.score as "hot" | "warm" | "cold" | undefined}
         reason={lead?.reason}
+      />
+      <ProfilePanel
+        contactId={contact.id}
+        initial={{
+          email: contact.email ?? null,
+          company: contact.company ?? null,
+          website: contact.website ?? null,
+          instagram: contact.instagram ?? null,
+          linkedin: contact.linkedin ?? null,
+          timeline: contact.timeline ?? null,
+          pain_points: contact.pain_points ?? null,
+          main_goal: contact.main_goal ?? null,
+        }}
+        profileUpdatedAt={contact.profile_updated_at ?? null}
       />
       <DealPanel
         contactId={contact.id}

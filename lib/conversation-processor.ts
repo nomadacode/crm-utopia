@@ -5,7 +5,9 @@ import {
   classifyLead,
   classifyHandoffNeed,
   classifySentiment,
+  extractLeadProfile,
   type ChatMessage,
+  type LeadProfile,
 } from "@/lib/ai";
 import { sendNotification } from "@/lib/resend";
 import { buildSystemPrompt } from "@/lib/utopia-prompt";
@@ -302,7 +304,7 @@ export async function processInboundMessage(input: ProcessedInbound): Promise<vo
     .update({ typing_until: null })
     .eq("id", contact.id);
 
-  // 16) After-response background work: classify lead + sentiment
+  // 16) After-response background work: classify lead + sentiment + extract profile
   after(async () => {
     try {
       await classifyAndMaybeNotify(contact, history);
@@ -320,7 +322,50 @@ export async function processInboundMessage(input: ProcessedInbound): Promise<vo
         console.error("[processor.after] sentiment failed", err);
       }
     }
+    // Lead profile enrichment — solo cuando hay suficiente contexto
+    const userMsgs = history.filter((m) => m.role === "user").length;
+    if (userMsgs >= 3) {
+      try {
+        await enrichLeadProfile(contact, history);
+      } catch (err) {
+        console.error("[processor.after] profile extraction failed", err);
+      }
+    }
   });
+}
+
+/**
+ * Extract structured lead data from conversation and merge non-null fields
+ * into the contact record. Never overwrites existing values with null.
+ */
+async function enrichLeadProfile(
+  contact: Contact,
+  history: ChatMessage[],
+): Promise<void> {
+  const supabase = supabaseAdmin();
+  const profile = await extractLeadProfile(history);
+  const patch: Partial<Contact> & { profile_updated_at?: string } = {};
+  const fields: (keyof LeadProfile)[] = [
+    "email",
+    "company",
+    "website",
+    "instagram",
+    "linkedin",
+    "timeline",
+    "pain_points",
+    "main_goal",
+  ];
+  for (const f of fields) {
+    const value = profile[f];
+    // Only update if we have a new non-null value AND the existing one is empty
+    if (value && !contact[f as keyof Contact]) {
+      (patch as Record<string, string>)[f] = value;
+    }
+  }
+  if (Object.keys(patch).length === 0) return;
+  patch.profile_updated_at = new Date().toISOString();
+  await supabase.from("contacts").update(patch).eq("id", contact.id);
+  console.log("[enrichLeadProfile] updated fields:", Object.keys(patch));
 }
 
 async function classifyAndMaybeNotify(

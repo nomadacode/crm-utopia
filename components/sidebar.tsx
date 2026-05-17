@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Columns,
+  Flame,
   Menu,
   MessageCircle,
   PanelLeftClose,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/conversations", label: "Conversaciones", icon: MessageCircle },
+  { href: "/leads", label: "Leads", icon: Flame },
   { href: "/pipeline", label: "Pipeline", icon: Columns },
   { href: "/test-chat", label: "Test chat", icon: TestTube2 },
   { href: "/settings", label: "Ajustes", icon: Settings },
