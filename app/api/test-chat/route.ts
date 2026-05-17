@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/lib/ai";
-import { getSystemPrompt, applyVariables } from "@/lib/utopia-prompt";
+import { buildSystemPrompt } from "@/lib/utopia-prompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +14,7 @@ export async function POST(req: NextRequest) {
   if (!user) return new NextResponse("forbidden", { status: 403 });
 
   const { history } = (await req.json()) as { history: ChatMessage[] };
-  const promptTemplate = await getSystemPrompt();
-  const systemPrompt = applyVariables(promptTemplate, {
+  const systemPrompt = await buildSystemPrompt({
     name: "Test User",
     phone: "+test",
     tags: [],

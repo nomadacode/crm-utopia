@@ -8,8 +8,10 @@ import { TagsPanel } from "./tags-panel";
 import { NotesPanel } from "./notes-panel";
 import { RemindersPanel } from "./reminders-panel";
 import { DealPanel } from "./deal-panel";
+import { HandoffBanner } from "./handoff-banner";
 import type {
   ContactNote,
+  EscalationReason,
   Message,
   PipelineStage,
   Reminder,
@@ -85,18 +87,26 @@ export default async function ConversationPage({
     .filter((t): t is Tag => t !== null);
 
   return (
-    <div className="mx-auto grid h-[calc(100vh-4rem)] max-w-6xl grid-cols-[1fr_280px] gap-6">
-      <Card className="flex flex-col overflow-hidden rounded-lg p-0">
-        <ConversationView
-          initialContact={{
-            id: contact.id,
-            phone: contact.phone,
-            name: contact.name,
-            typing_until: contact.typing_until,
-          }}
-          initialMessages={(messages ?? []) as Message[]}
+    <div className="mx-auto flex h-[calc(100vh-4rem)] max-w-6xl flex-col gap-3">
+      {contact.needs_human && contact.escalated_at && contact.escalation_reason && (
+        <HandoffBanner
+          contactId={contact.id}
+          reason={contact.escalation_reason as EscalationReason}
+          escalatedAt={contact.escalated_at}
         />
-      </Card>
+      )}
+      <div className="grid flex-1 min-h-0 grid-cols-[1fr_280px] gap-6">
+        <Card className="flex flex-col overflow-hidden rounded-lg p-0">
+          <ConversationView
+            initialContact={{
+              id: contact.id,
+              phone: contact.phone,
+              name: contact.name,
+              typing_until: contact.typing_until,
+            }}
+            initialMessages={(messages ?? []) as Message[]}
+          />
+        </Card>
 
       <div className="space-y-4 overflow-y-auto">
         <LeadCard
@@ -128,7 +138,9 @@ export default async function ConversationPage({
           initialBlocked={contact.blocked}
           initialBotEnabled={contact.bot_enabled}
           initialArchived={contact.archived_at != null}
+          initialNeedsHuman={contact.needs_human}
         />
+        </div>
       </div>
     </div>
   );

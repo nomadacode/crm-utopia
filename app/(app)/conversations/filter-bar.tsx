@@ -9,6 +9,7 @@ import type { Tag } from "@/lib/types";
 
 const TABS = [
   { key: "all", label: "Todas" },
+  { key: "needs_human", label: "🆘 Necesita humano" },
   { key: "unread", label: "No leídas" },
   { key: "hot", label: "Hot" },
   { key: "warm", label: "Warm" },

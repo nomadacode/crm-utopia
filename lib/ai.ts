@@ -85,6 +85,61 @@ export async function describeImage(
 }
 
 /**
+ * Detect whether the customer's message needs handoff to a human.
+ * Returns the kind of escalation if confidence is HIGH; "none" otherwise (fail-safe).
+ */
+export async function classifyHandoffNeed(
+  content: string,
+): Promise<{ kind: "explicit_request" | "frustration" | "none" }> {
+  // Skip empty/very short messages to avoid wasting tokens
+  if (!content || content.trim().length < 3) return { kind: "none" };
+
+  try {
+    const raw = await callOpenRouter(
+      [
+        {
+          role: "system",
+          content: `Analizás un mensaje de WhatsApp de un cliente a un chatbot y decidís si necesita derivación a un humano.
+
+Devolvé ÚNICAMENTE un JSON con dos campos:
+{"kind": "explicit_request" | "frustration" | "none", "confidence": "high" | "medium" | "low"}
+
+Criterios:
+- explicit_request: el cliente pide hablar con una persona/humano/asesor/operador/vendedor/agente real. Ejemplos: "quiero hablar con alguien", "pasame con un humano", "necesito una persona", "no quiero hablar con un bot".
+- frustration: el cliente está claramente enojado, frustrado o quejándose. Ejemplos: "estoy harto", "esto no funciona", "quiero cancelar", "quiero un reembolso", "esto es una estafa", "no me entendés nada", "horrible servicio".
+- none: cualquier otra cosa, incluyendo: preguntas normales, dudas, mensajes confusos, "no entendí", saludos, requests de info, etc.
+
+REGLAS CRÍTICAS:
+- Solo retornás explicit_request o frustration si tu confianza es ALTA. Ante CUALQUIER duda, retornás none.
+- Una pregunta inocente como "¿podés repetir?" o "no entendí" es none, no frustración.
+- Ser ambiguamente molesto no es suficiente, debe ser CLARAMENTE frustración o queja.
+- Pedido amable de info NO es explicit_request.
+
+Solo el JSON, sin texto adicional, sin markdown.`,
+        },
+        { role: "user", content },
+      ],
+      { jsonMode: true },
+    );
+
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return { kind: "none" };
+    const parsed = JSON.parse(match[0]) as {
+      kind?: string;
+      confidence?: string;
+    };
+    if (parsed.confidence !== "high") return { kind: "none" };
+    if (parsed.kind === "explicit_request" || parsed.kind === "frustration") {
+      return { kind: parsed.kind };
+    }
+    return { kind: "none" };
+  } catch (err) {
+    console.error("[classifyHandoffNeed] failed, defaulting to none:", err);
+    return { kind: "none" };
+  }
+}
+
+/**
  * Classify sentiment of a single message. Returns positive | neutral | negative.
  */
 export async function classifySentiment(

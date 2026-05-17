@@ -7,7 +7,14 @@ import type { Tag } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-type FilterKey = "unread" | "hot" | "warm" | "cold" | "archived" | null;
+type FilterKey =
+  | "unread"
+  | "hot"
+  | "warm"
+  | "cold"
+  | "archived"
+  | "needs_human"
+  | null;
 
 type Row = {
   id: string;
@@ -16,6 +23,8 @@ type Row = {
   blocked: boolean;
   last_read_at: string | null;
   archived_at: string | null;
+  needs_human: boolean;
+  escalated_at: string | null;
   lastMessage: string | null;
   lastAt: string | null;
   lastUserAt: string | null;
@@ -43,7 +52,11 @@ async function getConversations(opts: {
 
   let q = supabase
     .from("contacts")
-    .select("id, phone, name, blocked, last_read_at, archived_at")
+    .select(
+      "id, phone, name, blocked, last_read_at, archived_at, needs_human, escalated_at",
+    )
+    .order("needs_human", { ascending: false })
+    .order("escalated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -140,6 +153,8 @@ async function getConversations(opts: {
       blocked: c.blocked,
       last_read_at: c.last_read_at,
       archived_at: c.archived_at,
+      needs_human: c.needs_human,
+      escalated_at: c.escalated_at,
       lastMessage: lastByContact.get(c.id)?.content ?? null,
       lastAt: lastByContact.get(c.id)?.created_at ?? null,
       lastUserAt: lastUserByContact.get(c.id) ?? null,
@@ -168,6 +183,9 @@ async function getConversations(opts: {
       if (!r.last_read_at) return true;
       return new Date(r.lastUserAt) > new Date(r.last_read_at);
     });
+  }
+  if (opts.filter === "needs_human") {
+    rows = rows.filter((r) => r.needs_human);
   }
 
   return rows;
@@ -274,6 +292,14 @@ export default async function ConversationsPage({
                         >
                           {row.name ?? row.phone}
                         </span>
+                        {row.needs_human && (
+                          <span
+                            className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800"
+                            title="Necesita atención humana"
+                          >
+                            🆘 humano
+                          </span>
+                        )}
                         {row.blocked && (
                           <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-destructive">
                             bloq
