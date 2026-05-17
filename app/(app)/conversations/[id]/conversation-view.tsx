@@ -55,12 +55,13 @@ export function ConversationView({
     },
   );
 
-  // Realtime: track typing indicator
+  // Realtime: track typing indicator (and any other contact UPDATEs).
+  // Merge instead of replace — partial updates would otherwise wipe other fields.
   useRealtimeUpdates<ContactSummary>(
     "contacts",
     `id=eq.${contact.id}`,
     (payload) => {
-      setContact(payload.new);
+      setContact((prev) => ({ ...prev, ...payload.new }));
     },
   );
 
