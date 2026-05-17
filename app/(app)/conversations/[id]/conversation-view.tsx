@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Message } from "@/lib/types";
+import type { Channel, Message } from "@/lib/types";
 import {
   useRealtimeInserts,
   useRealtimeUpdates,
 } from "@/lib/supabase/realtime";
+import { ChannelIcon } from "@/components/channel-icon";
 import { SendMessageForm } from "./send-form";
 
 type ContactSummary = {
@@ -13,6 +14,7 @@ type ContactSummary = {
   phone: string;
   name: string | null;
   typing_until: string | null;
+  channel: Channel;
 };
 
 export function ConversationView({
@@ -87,9 +89,12 @@ export function ConversationView({
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
           {(contact.name ?? contact.phone).slice(0, 2).toUpperCase()}
         </div>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {contact.name ?? contact.phone}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <ChannelIcon channel={contact.channel} size={11} />
+            <span className="truncate text-sm font-medium">
+              {contact.name ?? contact.phone}
+            </span>
           </div>
           <div className="truncate text-xs text-muted-foreground tabular">
             {contact.phone}

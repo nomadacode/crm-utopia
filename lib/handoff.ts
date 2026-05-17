@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendWhatsAppMessage } from "./whatsapp";
+import { sendChannelMessage } from "./channels/dispatch";
 import { sendNotification } from "./resend";
-import type { Contact, EscalationReason } from "./types";
+import type { Channel, Contact, EscalationReason } from "./types";
 
 const HANDOFF_ACK_MESSAGE =
   "Listo, le aviso al equipo y un humano te escribe en breve. ¡Gracias por la paciencia! 🙏";
@@ -56,22 +56,28 @@ export async function resolveHandoff(
 }
 
 /**
- * Send a hardcoded acknowledgment to the customer's WhatsApp so they know the
- * handoff was registered. Caller should also save the message to the DB.
+ * Send a hardcoded acknowledgment to the customer (via their channel) so they
+ * know the handoff was registered. Caller passes the channel.
  */
 export async function sendHandoffAck(
   supabase: SupabaseClient,
   contact: Pick<Contact, "id" | "phone">,
+  channel: Channel,
 ): Promise<void> {
   try {
-    const wamid = await sendWhatsAppMessage(contact.phone, HANDOFF_ACK_MESSAGE);
+    const externalId = await sendChannelMessage(
+      channel,
+      contact.phone,
+      HANDOFF_ACK_MESSAGE,
+    );
     await supabase.from("messages").insert({
       contact_id: contact.id,
       role: "assistant",
       content: HANDOFF_ACK_MESSAGE,
-      whatsapp_message_id: wamid,
+      whatsapp_message_id: externalId,
       status: "sent",
       flagged_reason: "handoff_ack",
+      channel,
     });
   } catch (err) {
     console.error("[sendHandoffAck] send failed", err);
@@ -81,6 +87,7 @@ export async function sendHandoffAck(
       content: HANDOFF_ACK_MESSAGE,
       status: "failed",
       flagged_reason: "handoff_ack",
+      channel,
     });
   }
 }

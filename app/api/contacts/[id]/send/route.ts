@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendChannelMessage } from "@/lib/channels/dispatch";
+import type { Channel } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -23,20 +24,22 @@ export async function POST(
   const sb = supabaseAdmin();
   const { data: contact } = await sb
     .from("contacts")
-    .select("phone")
+    .select("phone, channel")
     .eq("id", id)
     .maybeSingle();
   if (!contact)
     return NextResponse.json({ error: "not found" }, { status: 404 });
 
   try {
-    const wamid = await sendWhatsAppMessage(contact.phone, content);
+    const channel = (contact.channel ?? "whatsapp") as Channel;
+    const externalId = await sendChannelMessage(channel, contact.phone, content);
     await sb.from("messages").insert({
       contact_id: id,
       role: "assistant",
       content,
-      whatsapp_message_id: wamid,
+      whatsapp_message_id: externalId,
       status: "sent",
+      channel,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

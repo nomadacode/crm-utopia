@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
+import { ChannelIcon } from "@/components/channel-icon";
 import { ListRefresher } from "./list-refresher";
 import { FilterBar } from "./filter-bar";
-import type { Tag } from "@/lib/types";
+import type { Channel, Tag } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ type Row = {
   archived_at: string | null;
   needs_human: boolean;
   escalated_at: string | null;
+  channel: Channel;
   lastMessage: string | null;
   lastAt: string | null;
   lastUserAt: string | null;
@@ -53,7 +55,7 @@ async function getConversations(opts: {
   let q = supabase
     .from("contacts")
     .select(
-      "id, phone, name, blocked, last_read_at, archived_at, needs_human, escalated_at",
+      "id, phone, name, blocked, last_read_at, archived_at, needs_human, escalated_at, channel",
     )
     .order("needs_human", { ascending: false })
     .order("escalated_at", { ascending: false, nullsFirst: false })
@@ -155,6 +157,7 @@ async function getConversations(opts: {
       archived_at: c.archived_at,
       needs_human: c.needs_human,
       escalated_at: c.escalated_at,
+      channel: (c.channel ?? "whatsapp") as Channel,
       lastMessage: lastByContact.get(c.id)?.content ?? null,
       lastAt: lastByContact.get(c.id)?.created_at ?? null,
       lastUserAt: lastUserByContact.get(c.id) ?? null,
@@ -287,6 +290,7 @@ export default async function ConversationsPage({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <ScoreDot score={row.score} />
+                        <ChannelIcon channel={row.channel} size={12} />
                         <span
                           className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}
                         >

@@ -10,6 +10,7 @@ import { RemindersPanel } from "./reminders-panel";
 import { DealPanel } from "./deal-panel";
 import { HandoffBanner } from "./handoff-banner";
 import type {
+  Channel,
   ContactNote,
   EscalationReason,
   Message,
@@ -103,6 +104,7 @@ export default async function ConversationPage({
               phone: contact.phone,
               name: contact.name,
               typing_until: contact.typing_until,
+              channel: (contact.channel ?? "whatsapp") as Channel,
             }}
             initialMessages={(messages ?? []) as Message[]}
           />
