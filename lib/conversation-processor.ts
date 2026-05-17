@@ -337,35 +337,57 @@ export async function processInboundMessage(input: ProcessedInbound): Promise<vo
 /**
  * Extract structured lead data from conversation and merge non-null fields
  * into the contact record. Never overwrites existing values with null.
+ * Sets profile_enriching_until before starting so the UI can show a live indicator.
  */
 async function enrichLeadProfile(
   contact: Contact,
   history: ChatMessage[],
 ): Promise<void> {
   const supabase = supabaseAdmin();
-  const profile = await extractLeadProfile(history);
-  const patch: Partial<Contact> & { profile_updated_at?: string } = {};
-  const fields: (keyof LeadProfile)[] = [
-    "email",
-    "company",
-    "website",
-    "instagram",
-    "linkedin",
-    "timeline",
-    "pain_points",
-    "main_goal",
-  ];
-  for (const f of fields) {
-    const value = profile[f];
-    // Only update if we have a new non-null value AND the existing one is empty
-    if (value && !contact[f as keyof Contact]) {
-      (patch as Record<string, string>)[f] = value;
+
+  // Signal "enriching now" so the UI shows the indicator
+  await supabase
+    .from("contacts")
+    .update({
+      profile_enriching_until: new Date(Date.now() + 30_000).toISOString(),
+    })
+    .eq("id", contact.id);
+
+  try {
+    const profile = await extractLeadProfile(history);
+    const patch: Partial<Contact> & { profile_updated_at?: string; profile_enriching_until?: null } = {};
+    const fields: (keyof LeadProfile)[] = [
+      "email",
+      "company",
+      "website",
+      "instagram",
+      "linkedin",
+      "timeline",
+      "pain_points",
+      "main_goal",
+    ];
+    for (const f of fields) {
+      const value = profile[f];
+      // Only update if we have a new non-null value AND the existing one is empty
+      if (value && !contact[f as keyof Contact]) {
+        (patch as Record<string, string>)[f] = value;
+      }
     }
+    if (Object.keys(patch).length > 0) {
+      patch.profile_updated_at = new Date().toISOString();
+    }
+    // Always clear the enriching flag (whether we updated anything or not)
+    patch.profile_enriching_until = null;
+    await supabase.from("contacts").update(patch).eq("id", contact.id);
+    console.log("[enrichLeadProfile] updated fields:", Object.keys(patch).filter((k) => k !== "profile_enriching_until"));
+  } catch (err) {
+    // On failure, clear the flag so the UI doesn't get stuck
+    await supabase
+      .from("contacts")
+      .update({ profile_enriching_until: null })
+      .eq("id", contact.id);
+    throw err;
   }
-  if (Object.keys(patch).length === 0) return;
-  patch.profile_updated_at = new Date().toISOString();
-  await supabase.from("contacts").update(patch).eq("id", contact.id);
-  console.log("[enrichLeadProfile] updated fields:", Object.keys(patch));
 }
 
 async function classifyAndMaybeNotify(

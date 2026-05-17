@@ -108,6 +108,7 @@ export default async function ConversationPage({
           main_goal: contact.main_goal ?? null,
         }}
         profileUpdatedAt={contact.profile_updated_at ?? null}
+        profileEnrichingUntil={contact.profile_enriching_until ?? null}
       />
       <DealPanel
         contactId={contact.id}

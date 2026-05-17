@@ -30,6 +30,7 @@ export type Contact = {
   pain_points: string | null;
   main_goal: string | null;
   profile_updated_at: string | null;
+  profile_enriching_until: string | null;
 };
 
 export type PipelineStage = {
