@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
 import { DashboardRefresher } from "./dashboard-refresher";
+import { RecentLeadsList } from "./recent-leads";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +17,19 @@ type DashboardData = {
   recentConversations: RecentConv[];
 };
 
-type RecentLead = {
+export type LeadEntry = {
   id: string;
   score: "hot" | "warm" | "cold";
   reason: string;
   qualified_at: string;
+};
+
+export type RecentLead = {
   contact_id: string;
   contact_name: string | null;
   contact_phone: string;
+  current: LeadEntry;
+  history: LeadEntry[]; // newest first; current is history[0]
 };
 
 type RecentConv = {
@@ -62,7 +68,7 @@ async function getData(): Promise<DashboardData> {
           "id, score, reason, qualified_at, contact_id, contact:contacts(name, phone)",
         )
         .order("qualified_at", { ascending: false })
-        .limit(5),
+        .limit(100),
       supabase
         .from("messages")
         .select(
@@ -73,7 +79,10 @@ async function getData(): Promise<DashboardData> {
     ]);
 
   const leads = leadsRes.data ?? [];
-  type RecentLeadRow = {
+
+  // Group leads by contact_id. Latest classification per contact = "current";
+  // older ones go into history. Show up to 5 unique contacts.
+  type RawLeadRow = {
     id: string;
     score: "hot" | "warm" | "cold";
     reason: string;
@@ -81,17 +90,30 @@ async function getData(): Promise<DashboardData> {
     contact_id: string;
     contact: { name: string | null; phone: string } | null;
   };
-  const recentLeads: RecentLead[] = (
-    (recentLeadsRes.data ?? []) as unknown as RecentLeadRow[]
-  ).map((l) => ({
-    id: l.id,
-    score: l.score,
-    reason: l.reason,
-    qualified_at: l.qualified_at,
-    contact_id: l.contact_id,
-    contact_name: l.contact?.name ?? null,
-    contact_phone: l.contact?.phone ?? "",
-  }));
+  const rawRows = (recentLeadsRes.data ?? []) as unknown as RawLeadRow[];
+  const groupedByContact = new Map<string, RecentLead>();
+  for (const r of rawRows) {
+    const entry: LeadEntry = {
+      id: r.id,
+      score: r.score,
+      reason: r.reason,
+      qualified_at: r.qualified_at,
+    };
+    const existing = groupedByContact.get(r.contact_id);
+    if (existing) {
+      existing.history.push(entry);
+    } else {
+      groupedByContact.set(r.contact_id, {
+        contact_id: r.contact_id,
+        contact_name: r.contact?.name ?? null,
+        contact_phone: r.contact?.phone ?? "",
+        current: entry,
+        history: [entry],
+      });
+    }
+  }
+  // Take top 5 unique contacts (already ordered by latest qualified_at)
+  const recentLeads: RecentLead[] = Array.from(groupedByContact.values()).slice(0, 5);
 
   const seen = new Set<string>();
   type RecentMsgRow = {
@@ -164,31 +186,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Section title="Leads recientes" empty={d.recentLeads.length === 0}>
-          <ul className="divide-y divide-border">
-            {d.recentLeads.map((l) => (
-              <li key={l.id}>
-                <Link
-                  href={`/conversations/${l.contact_id}`}
-                  className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/50"
-                >
-                  <ScoreDot score={l.score} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {l.contact_name ?? l.contact_phone}
-                      </span>
-                      <span className="shrink-0 text-xs text-muted-foreground tabular">
-                        {formatRelative(l.qualified_at)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                      {l.reason}
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <RecentLeadsList leads={d.recentLeads} />
         </Section>
 
         <Section
