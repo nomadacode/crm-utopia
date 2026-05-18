@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { EscalationReason } from "@/lib/types";
+import { useClientNow } from "@/lib/hooks";
 
 const REASON_LABEL: Record<EscalationReason, string> = {
   explicit_request: "El cliente pidió hablar con un humano",
@@ -21,17 +22,6 @@ function timeAgo(iso: string, now: number): string {
   if (h < 24) return `hace ${h}h`;
   const d = Math.floor(h / 24);
   return `hace ${d}d`;
-}
-
-/** Client-only "now" — avoids server/client hydration mismatch on relative times. */
-function useClientNow(refreshMs = 60_000): number | null {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), refreshMs);
-    return () => clearInterval(t);
-  }, [refreshMs]);
-  return now;
 }
 
 export function HandoffBanner({

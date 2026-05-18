@@ -1,21 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClientNow } from "@/lib/hooks";
 import type { LeadEntry, RecentLead } from "./page";
-
-/** Client-only "now" — evita hydration mismatch en tiempos relativos. */
-function useClientNow(): number | null {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
-}
 
 const SCORE_DOT: Record<"hot" | "warm" | "cold", string> = {
   hot: "bg-accent",

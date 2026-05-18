@@ -6,6 +6,7 @@ import {
   useRealtimeInserts,
   useRealtimeUpdates,
 } from "@/lib/supabase/realtime";
+import { useClientNow } from "@/lib/hooks";
 import { ChannelIcon } from "@/components/channel-icon";
 import { SendMessageForm } from "./send-form";
 
@@ -67,8 +68,12 @@ export function ConversationView({
     },
   );
 
+  // Typing indicator expires quickly, so we tick once per second.
+  const now = useClientNow(1000);
   const isTyping =
-    contact.typing_until && new Date(contact.typing_until).getTime() > Date.now();
+    !!contact.typing_until &&
+    now != null &&
+    new Date(contact.typing_until).getTime() > now;
 
   function addPendingMessage(content: string) {
     setPendingMessages((prev) => [
@@ -262,7 +267,6 @@ function Dot({ delay }: { delay: number }) {
 function ScrollToBottom({ deps }: { deps: unknown[] }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const container = document.scrollingElement;
     requestAnimationFrame(() => {
       const el = document.querySelector("[data-chat-scroll-anchor]");
       el?.scrollIntoView({ behavior: "smooth", block: "end" });

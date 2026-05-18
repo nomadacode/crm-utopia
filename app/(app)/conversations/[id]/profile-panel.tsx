@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Save, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRealtimeUpdates } from "@/lib/supabase/realtime";
+import { useClientNow } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 type ProfileFields = {
@@ -84,15 +85,9 @@ export function ProfilePanel({
   // Field keys that just changed via realtime — used to flash background briefly
   const [flashing, setFlashing] = useState<Set<FieldKey>>(new Set());
   const flashTimers = useRef<Map<FieldKey, ReturnType<typeof setTimeout>>>(new Map());
-  // Trigger re-render every 5s while enriching to refresh the "isEnriching" computed flag
-  const [, setTick] = useState(0);
-
-  // Live ticker while enriching to know when the window expires
-  useEffect(() => {
-    if (!enrichingUntil) return;
-    const t = setInterval(() => setTick((n) => n + 1), 2000);
-    return () => clearInterval(t);
-  }, [enrichingUntil]);
+  // Tick every 2s so the enriching-window expiry is observed without
+  // computing Date.now() during render.
+  const now = useClientNow(2000);
 
   // Realtime: when this contact row updates, merge profile fields into local state
   useRealtimeUpdates<ContactRealtimePayload>(
@@ -186,7 +181,9 @@ export function ProfilePanel({
 
   const hasAny = ORDER.some((k) => values[k]);
   const isEnriching =
-    !!enrichingUntil && new Date(enrichingUntil).getTime() > Date.now();
+    !!enrichingUntil &&
+    now != null &&
+    new Date(enrichingUntil).getTime() > now;
 
   return (
     <Card className="rounded-lg p-5 space-y-3">
