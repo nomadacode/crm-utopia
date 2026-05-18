@@ -5,6 +5,11 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PipelineStage } from "@/lib/types";
+import { useRealtimeUpdates } from "@/lib/supabase/realtime";
+
+type DealRealtimePayload = {
+  stage_id: string | null;
+};
 
 export function DealPanel({
   contactId,
@@ -25,6 +30,21 @@ export function DealPanel({
     initialDealValue == null ? "" : String(initialDealValue),
   );
   const [, startTransition] = useTransition();
+
+  // Only mirror stage_id from realtime. Industry and deal_value are free-text
+  // inputs that the user can be actively typing into — overwriting those
+  // mid-edit would discard their work. They still get updated on the next
+  // server-side fetch (panel re-mount) which is fine for the rare case
+  // where they change from outside.
+  useRealtimeUpdates<DealRealtimePayload>(
+    "contacts",
+    `id=eq.${contactId}`,
+    (payload) => {
+      if ("stage_id" in payload.new) {
+        setStageId(payload.new.stage_id ?? "");
+      }
+    },
+  );
 
   function patch(body: Record<string, unknown>) {
     startTransition(async () => {

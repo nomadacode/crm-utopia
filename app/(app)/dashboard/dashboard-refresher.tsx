@@ -40,6 +40,16 @@ export function DashboardRefresher() {
           { event: "INSERT", schema: "public", table: "messages" },
           schedule,
         )
+        .on(
+          "postgres_changes" as never,
+          { event: "INSERT", schema: "public", table: "leads" },
+          schedule,
+        )
+        .on(
+          "postgres_changes" as never,
+          { event: "UPDATE", schema: "public", table: "contacts" },
+          schedule,
+        )
         .subscribe();
     })();
 

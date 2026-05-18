@@ -7,6 +7,14 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
+import { useRealtimeUpdates } from "@/lib/supabase/realtime";
+
+type ContactControlState = {
+  blocked: boolean;
+  bot_enabled: boolean;
+  archived_at: string | null;
+  needs_human: boolean;
+};
 
 export function ConversationControls({
   contactId,
@@ -24,9 +32,25 @@ export function ConversationControls({
   const [blocked, setBlocked] = useState(initialBlocked);
   const [botEnabled, setBotEnabled] = useState(initialBotEnabled);
   const [archived, setArchived] = useState(initialArchived);
+  const [needsHuman, setNeedsHuman] = useState(initialNeedsHuman);
   const [escalating, setEscalating] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
+
+  // Mirror server-side mutations (handoff flips bot_enabled to false; bulk
+  // archive/unarchive from the conversations list; manual escalate from
+  // another tab; etc.) so the UI never lies about the contact's state.
+  useRealtimeUpdates<ContactControlState>(
+    "contacts",
+    `id=eq.${contactId}`,
+    (payload) => {
+      const next = payload.new;
+      if (typeof next.blocked === "boolean") setBlocked(next.blocked);
+      if (typeof next.bot_enabled === "boolean") setBotEnabled(next.bot_enabled);
+      if ("archived_at" in next) setArchived(next.archived_at != null);
+      if (typeof next.needs_human === "boolean") setNeedsHuman(next.needs_human);
+    },
+  );
 
   function update(patch: {
     blocked?: boolean;
@@ -56,6 +80,7 @@ export function ConversationControls({
       });
       if (res.ok) {
         setBotEnabled(false);
+        setNeedsHuman(true);
         startTransition(() => router.refresh());
       }
     } finally {
@@ -83,7 +108,7 @@ export function ConversationControls({
         />
       </div>
 
-      {!initialNeedsHuman && (
+      {!needsHuman && (
         <Button
           variant="outline"
           className="w-full"

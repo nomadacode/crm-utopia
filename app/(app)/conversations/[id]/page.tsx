@@ -92,8 +92,9 @@ export default async function ConversationPage({
   const panelChildren = (
     <>
       <LeadCard
-        score={lead?.score as "hot" | "warm" | "cold" | undefined}
-        reason={lead?.reason}
+        contactId={contact.id}
+        initialScore={lead?.score as "hot" | "warm" | "cold" | undefined}
+        initialReason={lead?.reason}
       />
       <ProfilePanel
         contactId={contact.id}

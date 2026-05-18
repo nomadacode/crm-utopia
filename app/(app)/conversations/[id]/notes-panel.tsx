@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Trash2 } from "lucide-react";
 import type { ContactNote } from "@/lib/types";
+import {
+  useRealtimeInserts,
+  useRealtimeDeletes,
+} from "@/lib/supabase/realtime";
 
 export function NotesPanel({
   contactId,
@@ -17,6 +21,27 @@ export function NotesPanel({
   const [notes, setNotes] = useState<ContactNote[]>(initialNotes);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Reflect notes added or removed from other sessions / future automations.
+  // INSERT prepends (notes are sorted desc by created_at), DELETE filters out.
+  useRealtimeInserts<ContactNote>(
+    "contact_notes",
+    `contact_id=eq.${contactId}`,
+    (payload) => {
+      setNotes((prev) =>
+        prev.some((n) => n.id === payload.new.id) ? prev : [payload.new, ...prev],
+      );
+    },
+  );
+
+  useRealtimeDeletes<ContactNote>(
+    "contact_notes",
+    `contact_id=eq.${contactId}`,
+    (payload) => {
+      const removedId = payload.old.id;
+      setNotes((prev) => prev.filter((n) => n.id !== removedId));
+    },
+  );
 
   async function addNote() {
     const trimmed = draft.trim();

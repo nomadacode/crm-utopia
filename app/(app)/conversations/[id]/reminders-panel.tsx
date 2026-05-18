@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, Plus, Bell } from "lucide-react";
 import type { Reminder } from "@/lib/types";
+import {
+  useRealtimeInserts,
+  useRealtimeUpdates,
+} from "@/lib/supabase/realtime";
 
 function defaultRemindAt(): string {
   const tomorrow = new Date();
@@ -28,6 +32,34 @@ export function RemindersPanel({
   const [message, setMessage] = useState("");
   const [remindAt, setRemindAt] = useState(defaultRemindAt());
   const [saving, setSaving] = useState(false);
+
+  // Pick up new reminders created from cron jobs, automations, or other
+  // sessions. INSERT inserts in sorted position; UPDATE handles dismissals
+  // (the dismiss endpoint sets dismissed_at instead of deleting).
+  useRealtimeInserts<Reminder>(
+    "reminders",
+    `contact_id=eq.${contactId}`,
+    (payload) => {
+      setReminders((prev) =>
+        prev.some((r) => r.id === payload.new.id)
+          ? prev
+          : [...prev, payload.new].sort((a, b) =>
+              a.remind_at.localeCompare(b.remind_at),
+            ),
+      );
+    },
+  );
+
+  useRealtimeUpdates<Reminder>(
+    "reminders",
+    `contact_id=eq.${contactId}`,
+    (payload) => {
+      const next = payload.new;
+      setReminders((prev) =>
+        prev.map((r) => (r.id === next.id ? { ...r, ...next } : r)),
+      );
+    },
+  );
 
   async function create() {
     if (!message.trim()) return;
