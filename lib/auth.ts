@@ -9,6 +9,7 @@ export type CurrentUser = {
   email: string;
   role: UserRole;
   full_name: string | null;
+  is_active: boolean;
 };
 
 /**
@@ -29,7 +30,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const admin = supabaseAdmin();
   const { data: profile } = await admin
     .from("user_profiles")
-    .select("role, full_name")
+    .select("role, full_name, is_active")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -38,6 +39,9 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     email: user.email ?? "",
     role: (profile?.role ?? "agent") as UserRole,
     full_name: profile?.full_name ?? null,
+    // Default to true so a freshly-signed-up user whose profile hasn't been
+    // inserted yet by the trigger isn't accidentally locked out.
+    is_active: profile?.is_active ?? true,
   };
 }
 
@@ -54,6 +58,7 @@ export class AuthError extends Error {
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) throw new AuthError("Unauthenticated", 401);
+  if (!user.is_active) throw new AuthError("Account deactivated", 403);
   return user;
 }
 
