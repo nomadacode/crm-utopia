@@ -1,50 +1,12 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { Card } from "@/components/ui/card";
-import { ChannelIcon } from "@/components/channel-icon";
 import { ListRefresher } from "./list-refresher";
 import { FilterBar } from "./filter-bar";
+import { ConversationList, type ConversationRow } from "./conversation-list";
+import { type FilterKey } from "./bulk-action-bar";
 import type { Channel, Tag } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-type FilterKey =
-  | "unread"
-  | "hot"
-  | "warm"
-  | "cold"
-  | "archived"
-  | "needs_human"
-  | null;
-
-type Row = {
-  id: string;
-  phone: string;
-  name: string | null;
-  blocked: boolean;
-  last_read_at: string | null;
-  archived_at: string | null;
-  needs_human: boolean;
-  escalated_at: string | null;
-  channel: Channel;
-  lastMessage: string | null;
-  lastAt: string | null;
-  lastUserAt: string | null;
-  score: "hot" | "warm" | "cold" | null;
-  tags: Tag[];
-};
-
-const COLOR_CLASSES: Record<string, string> = {
-  gray: "bg-zinc-200 text-zinc-700",
-  lime: "bg-accent text-accent-foreground",
-  blue: "bg-blue-100 text-blue-800",
-  amber: "bg-amber-100 text-amber-800",
-  violet: "bg-violet-100 text-violet-800",
-  pink: "bg-pink-100 text-pink-800",
-  red: "bg-red-100 text-red-800",
-  cyan: "bg-cyan-100 text-cyan-800",
-};
 
 type ContactSummary = {
   contact_id: string;
@@ -60,7 +22,7 @@ async function getConversations(opts: {
   query?: string;
   filter?: FilterKey;
   tagId?: string;
-}): Promise<Row[]> {
+}): Promise<ConversationRow[]> {
   const supabase = supabaseAdmin();
 
   let q = supabase
@@ -126,7 +88,7 @@ async function getConversations(opts: {
   }
 
   const allowedIds = new Set(ids);
-  let rows: Row[] = contacts
+  let rows: ConversationRow[] = contacts
     .filter((c) => allowedIds.has(c.id))
     .map((c) => {
       const summary = summaryByContact.get(c.id);
@@ -175,36 +137,6 @@ async function getConversations(opts: {
   }
 
   return rows;
-}
-
-function ScoreDot({ score }: { score: Row["score"] }) {
-  if (!score) return null;
-  const cls = {
-    hot: "bg-accent",
-    warm: "bg-amber-400",
-    cold: "bg-zinc-300",
-  }[score];
-  return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls}`} />;
-}
-
-function isUnread(row: Row): boolean {
-  if (!row.lastUserAt) return false;
-  if (!row.last_read_at) return true;
-  return new Date(row.lastUserAt) > new Date(row.last_read_at);
-}
-
-function formatRelative(iso: string | null): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const min = Math.floor(diffMs / 60000);
-  if (min < 1) return "ahora";
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
-  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 }
 
 type Search = {
@@ -260,90 +192,20 @@ async function ConversationsContent({
     getConversations({ query, filter, tagId }),
   ]);
 
+  const hasFilters = Boolean(query || filter || tagId);
+  const emptyMessage = hasFilters
+    ? "Sin resultados para los filtros aplicados."
+    : "Sin conversaciones todavía. Mandá un mensaje al WhatsApp configurado.";
+
   return (
     <>
-      <p className="text-sm text-muted-foreground">
-        {rows.length} {rows.length === 1 ? "resultado" : "resultados"}
-      </p>
       <FilterBar tags={(tags ?? []) as Tag[]} />
-
-      {rows.length === 0 ? (
-        <Card className="rounded-lg p-12 text-center text-sm text-muted-foreground">
-          {query || filter || tagId
-            ? "Sin resultados para los filtros aplicados."
-            : "Sin conversaciones todavía. Mandá un mensaje al WhatsApp configurado."}
-        </Card>
-      ) : (
-        <Card className="overflow-hidden rounded-lg p-0">
-          <ul className="divide-y divide-border">
-            {rows.map((row) => {
-              const unread = isUnread(row);
-              return (
-                <li key={row.id}>
-                  <Link
-                    href={`/conversations/${row.id}`}
-                    className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="relative">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                        {(row.name ?? row.phone).slice(0, 2).toUpperCase()}
-                      </div>
-                      {unread && (
-                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-card" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <ScoreDot score={row.score} />
-                        <ChannelIcon channel={row.channel} size={12} />
-                        <span
-                          className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}
-                        >
-                          {row.name ?? row.phone}
-                        </span>
-                        {row.needs_human && (
-                          <span
-                            className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800"
-                            title="Necesita atención humana"
-                          >
-                            🆘 humano
-                          </span>
-                        )}
-                        {row.blocked && (
-                          <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-destructive">
-                            bloq
-                          </span>
-                        )}
-                        {row.tags.slice(0, 2).map((t) => (
-                          <span
-                            key={t.id}
-                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${COLOR_CLASSES[t.color] ?? COLOR_CLASSES.gray}`}
-                          >
-                            {t.name}
-                          </span>
-                        ))}
-                        {row.tags.length > 2 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            +{row.tags.length - 2}
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className={`mt-0.5 truncate text-sm ${unread ? "text-foreground" : "text-muted-foreground"}`}
-                      >
-                        {row.lastMessage ?? "—"}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-xs text-muted-foreground tabular">
-                      {formatRelative(row.lastAt)}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
+      <ConversationList
+        rows={rows}
+        tags={(tags ?? []) as Tag[]}
+        filter={filter}
+        emptyMessage={emptyMessage}
+      />
     </>
   );
 }
@@ -351,7 +213,6 @@ async function ConversationsContent({
 function ConversationsSkeleton() {
   return (
     <div className="animate-pulse space-y-6">
-      <div className="h-4 w-32 rounded bg-muted" />
       <div className="h-9 w-full rounded bg-muted/60" />
       <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
         <ul className="divide-y divide-border">
