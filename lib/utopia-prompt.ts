@@ -25,12 +25,14 @@ export type BusinessProfile = {
   updated_at: string;
 };
 
-export const BUSINESS_PROFILE_FIELDS: Array<{
+export type ProfileField = {
   key: keyof Omit<BusinessProfile, "updated_at">;
   label: string;
   placeholder: string;
   rows: number;
-}> = [
+};
+
+export const BUSINESS_FIELDS: ProfileField[] = [
   {
     key: "business_name",
     label: "Nombre del negocio",
@@ -71,26 +73,35 @@ export const BUSINESS_PROFILE_FIELDS: Array<{
     rows: 1,
   },
   {
-    key: "handoff_info",
-    label: "Qué hacer si hay que derivar a un humano",
-    placeholder:
-      "Ej: \"Un humano del equipo escribe en breve.\" (Si querés que UtopIA pase tu teléfono o email, escribilo acá. Si lo dejás en blanco, solo dice que un humano contacta.)",
-    rows: 2,
-  },
-  {
-    key: "handoff_protocol",
-    label: "Reglas de derivación a humano",
-    placeholder:
-      "Cuándo UtopIA debe derivar y cómo comunicarlo. Si lo dejás vacío se usan las reglas por defecto.",
-    rows: 10,
-  },
-  {
     key: "additional_context",
     label: "Contexto adicional",
     placeholder:
       "Todo lo que UtopIA debería saber y no entra arriba: tono de marca, valores, palabras prohibidas, promos vigentes, FAQ, etc.",
     rows: 5,
   },
+];
+
+export const HANDOFF_FIELDS: ProfileField[] = [
+  {
+    key: "handoff_info",
+    label: "Qué le decís al cliente cuando derivás",
+    placeholder:
+      "Ej: \"Un humano del equipo escribe en breve.\" (Si querés que UtopIA pase tu teléfono o email, escribilo acá. Si lo dejás en blanco, solo dice que un humano contacta.)",
+    rows: 2,
+  },
+  {
+    key: "handoff_protocol",
+    label: "Cuándo UtopIA debe derivar",
+    placeholder:
+      "Reglas que UtopIA sigue para decidir cuándo escalar a un humano. Si lo dejás vacío se usan las reglas por defecto.",
+    rows: 10,
+  },
+];
+
+/** Kept for backwards-compat with code that imports the combined list. */
+export const BUSINESS_PROFILE_FIELDS: ProfileField[] = [
+  ...BUSINESS_FIELDS,
+  ...HANDOFF_FIELDS,
 ];
 
 export async function getActivePreset(): Promise<PromptPreset | null> {

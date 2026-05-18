@@ -129,7 +129,7 @@ export function TagsPanel({
           {allTags.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               No hay tags todavía. Crealos en{" "}
-              <a href="/settings/tags" className="underline">
+              <a href="/settings" className="underline">
                 Ajustes → Tags
               </a>
               .
