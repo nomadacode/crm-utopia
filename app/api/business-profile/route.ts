@@ -33,6 +33,7 @@ export async function PUT(req: NextRequest) {
     "hours",
     "calendar_link",
     "handoff_info",
+    "handoff_protocol",
     "additional_context",
   ] as const;
   const patch: Partial<BusinessProfile> = {};
