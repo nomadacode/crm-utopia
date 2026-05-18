@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { EscalationReason } from "@/lib/types";
 import { useClientNow } from "@/lib/hooks";
+import { useRealtimeUpdates } from "@/lib/supabase/realtime";
 
 const REASON_LABEL: Record<EscalationReason, string> = {
   explicit_request: "El cliente pidió hablar con un humano",
@@ -25,19 +26,42 @@ function timeAgo(iso: string, now: number): string {
   return `hace ${d}d`;
 }
 
+type HandoffState = {
+  needs_human: boolean;
+  escalation_reason: EscalationReason | null;
+  escalated_at: string | null;
+};
+
+/**
+ * Always mounted (regardless of current escalation state) so the realtime
+ * subscription is live when the bot escalates mid-conversation. Renders null
+ * when the contact doesn't need human attention.
+ */
 export function HandoffBanner({
   contactId,
-  reason,
-  escalatedAt,
+  initial,
 }: {
   contactId: string;
-  reason: EscalationReason;
-  escalatedAt: string;
+  initial: HandoffState;
 }) {
+  const [state, setState] = useState<HandoffState>(initial);
   const [resolving, setResolving] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
   const now = useClientNow();
+
+  useRealtimeUpdates<HandoffState>(
+    "contacts",
+    `id=eq.${contactId}`,
+    (payload) => {
+      const next = payload.new;
+      setState({
+        needs_human: next.needs_human ?? false,
+        escalation_reason: next.escalation_reason ?? null,
+        escalated_at: next.escalated_at ?? null,
+      });
+    },
+  );
 
   async function resolve() {
     setResolving(true);
@@ -46,11 +70,22 @@ export function HandoffBanner({
         method: "POST",
       });
       if (res.ok) {
+        // Hide optimistically — the realtime UPDATE will arrive shortly with
+        // the same shape but this avoids waiting for the round-trip.
+        setState({
+          needs_human: false,
+          escalation_reason: null,
+          escalated_at: null,
+        });
         startTransition(() => router.refresh());
       }
     } finally {
       setResolving(false);
     }
+  }
+
+  if (!state.needs_human || !state.escalation_reason || !state.escalated_at) {
+    return null;
   }
 
   return (
@@ -61,8 +96,8 @@ export function HandoffBanner({
           Este contacto necesita atención humana
         </p>
         <p className="mt-0.5 text-xs text-amber-800">
-          {REASON_LABEL[reason]}
-          {now != null && <> · escalado {timeAgo(escalatedAt, now)}</>}.{" "}
+          {REASON_LABEL[state.escalation_reason]}
+          {now != null && <> · escalado {timeAgo(state.escalated_at, now)}</>}.{" "}
           UtopIA quedó pausada hasta que marques como atendido.
         </p>
       </div>

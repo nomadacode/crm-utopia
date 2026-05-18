@@ -142,13 +142,16 @@ export default async function ConversationPage({
 
   return (
     <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-6xl flex-col gap-3 md:h-[calc(100vh-4rem)]">
-      {contact.needs_human && contact.escalated_at && contact.escalation_reason && (
-        <HandoffBanner
-          contactId={contact.id}
-          reason={contact.escalation_reason as EscalationReason}
-          escalatedAt={contact.escalated_at}
-        />
-      )}
+      <HandoffBanner
+        contactId={contact.id}
+        initial={{
+          needs_human: contact.needs_human,
+          escalation_reason:
+            (contact.escalation_reason as EscalationReason | null) ?? null,
+          escalated_at: contact.escalated_at,
+        }}
+      />
+
       <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[1fr_280px]">
         <Card className="flex flex-col overflow-hidden rounded-lg p-0">
           <ConversationView
