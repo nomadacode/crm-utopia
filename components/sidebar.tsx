@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -28,6 +28,38 @@ const ITEMS = [
 ];
 
 const STORAGE_KEY = "utopia.sidebar.collapsed";
+const COLLAPSED_CHANGE_EVENT = "utopia:sidebar-collapsed";
+
+// External store for the collapsed flag. Using useSyncExternalStore avoids
+// the setState-in-effect pattern (which React 19 flags as a cascading-render
+// hazard) while still reading the value from localStorage on the client.
+function subscribeCollapsed(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", callback);
+  window.addEventListener(COLLAPSED_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(COLLAPSED_CHANGE_EVENT, callback);
+  };
+}
+
+function readCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(value: boolean): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    // ignore (private mode, etc.)
+  }
+  window.dispatchEvent(new Event(COLLAPSED_CHANGE_EVENT));
+}
 
 function NavList({
   collapsed = false,
@@ -89,30 +121,21 @@ function Brand({ collapsed = false }: { collapsed?: boolean }) {
 
 export function Sidebar() {
   const [open, setOpen] = useState(false); // mobile drawer
-  const [collapsed, setCollapsed] = useState(false); // desktop collapse
-  const [hydrated, setHydrated] = useState(false);
-
-  // Restore collapsed state from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "1") setCollapsed(true);
-    } catch {
-      // ignore (private mode, etc.)
-    }
-    setHydrated(true);
-  }, []);
+  const collapsed = useSyncExternalStore(
+    subscribeCollapsed,
+    readCollapsed,
+    () => false,
+  );
+  // Mounted flag (true after hydration) to avoid a flash of wrong width
+  // when the stored value disagrees with the SSR default.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   function toggleCollapsed() {
-    setCollapsed((c) => {
-      const next = !c;
-      try {
-        localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+    writeCollapsed(!collapsed);
   }
 
   return (

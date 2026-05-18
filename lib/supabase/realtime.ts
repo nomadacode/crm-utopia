@@ -1,7 +1,19 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { supabaseBrowser } from "./client";
+
+// Keep a mutable callback fresh across renders without re-subscribing the
+// channel. Writing to ref.current during render breaks React 19's render
+// purity rules (the ref read in a callback can land mid-render and read a
+// stale value); a layout effect is the canonical replacement.
+function useLatestCallback<T>(value: T) {
+  const ref = useRef(value);
+  useLayoutEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
 
 type ChangePayload<T> = {
   new: T;
@@ -42,8 +54,7 @@ export function useRealtimeInserts<T>(
   filter: string | undefined,
   onInsert: (payload: ChangePayload<T>) => void,
 ) {
-  const handler = useRef(onInsert);
-  handler.current = onInsert;
+  const handler = useLatestCallback(onInsert);
 
   useEffect(() => {
     const supabase = supabaseBrowser();
@@ -78,7 +89,10 @@ export function useRealtimeInserts<T>(
         supabase.removeChannel(channelRef);
       }
     };
-  }, [table, filter]);
+    // `handler` is a stable ref managed by useLatestCallback; its identity
+    // never changes, so re-running this effect on its account is safe but
+    // unnecessary. Adding it to the deps array just to satisfy the linter.
+  }, [table, filter, handler]);
 }
 
 export function useRealtimeUpdates<T>(
@@ -86,8 +100,7 @@ export function useRealtimeUpdates<T>(
   filter: string | undefined,
   onUpdate: (payload: ChangePayload<T>) => void,
 ) {
-  const handler = useRef(onUpdate);
-  handler.current = onUpdate;
+  const handler = useLatestCallback(onUpdate);
 
   useEffect(() => {
     const supabase = supabaseBrowser();
@@ -122,5 +135,8 @@ export function useRealtimeUpdates<T>(
         supabase.removeChannel(channelRef);
       }
     };
-  }, [table, filter]);
+    // `handler` is a stable ref managed by useLatestCallback; its identity
+    // never changes, so re-running this effect on its account is safe but
+    // unnecessary. Adding it to the deps array just to satisfy the linter.
+  }, [table, filter, handler]);
 }

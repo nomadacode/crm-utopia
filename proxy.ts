@@ -16,7 +16,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  let response = NextResponse.next({ request: req });
+  const response = NextResponse.next({ request: req });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
