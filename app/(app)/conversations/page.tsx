@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
@@ -45,6 +46,16 @@ const COLOR_CLASSES: Record<string, string> = {
   cyan: "bg-cyan-100 text-cyan-800",
 };
 
+type ContactSummary = {
+  contact_id: string;
+  last_message_content: string | null;
+  last_message_at: string | null;
+  last_user_at: string | null;
+  latest_score: "hot" | "warm" | "cold" | null;
+  latest_score_reason: string | null;
+  latest_qualified_at: string | null;
+};
+
 async function getConversations(opts: {
   query?: string;
   filter?: FilterKey;
@@ -90,48 +101,17 @@ async function getConversations(opts: {
     if (ids.length === 0) return [];
   }
 
-  const [
-    { data: lastMsgs },
-    { data: lastUserMsgs },
-    { data: lastLeads },
-    { data: contactTags },
-  ] = await Promise.all([
-    supabase
-      .from("messages")
-      .select("contact_id, content, created_at, role")
-      .in("contact_id", ids)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("messages")
-      .select("contact_id, created_at")
-      .in("contact_id", ids)
-      .eq("role", "user")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("leads")
-      .select("contact_id, score, qualified_at")
-      .in("contact_id", ids)
-      .order("qualified_at", { ascending: false }),
+  const [{ data: summaryRows }, { data: contactTags }] = await Promise.all([
+    supabase.rpc("contacts_summary", { p_contact_ids: ids }),
     supabase
       .from("contact_tags")
       .select("contact_id, tag:tags(id, name, color, created_at)")
       .in("contact_id", ids),
   ]);
 
-  const lastByContact = new Map<string, { content: string; created_at: string }>();
-  for (const m of lastMsgs ?? []) {
-    if (!lastByContact.has(m.contact_id))
-      lastByContact.set(m.contact_id, { content: m.content, created_at: m.created_at });
-  }
-  const lastUserByContact = new Map<string, string>();
-  for (const m of lastUserMsgs ?? []) {
-    if (!lastUserByContact.has(m.contact_id))
-      lastUserByContact.set(m.contact_id, m.created_at);
-  }
-  const scoreByContact = new Map<string, "hot" | "warm" | "cold">();
-  for (const l of lastLeads ?? []) {
-    if (!scoreByContact.has(l.contact_id))
-      scoreByContact.set(l.contact_id, l.score);
+  const summaryByContact = new Map<string, ContactSummary>();
+  for (const row of (summaryRows ?? []) as ContactSummary[]) {
+    summaryByContact.set(row.contact_id, row);
   }
   const tagsByContact = new Map<string, Tag[]>();
   type TagJoin = {
@@ -148,22 +128,25 @@ async function getConversations(opts: {
   const allowedIds = new Set(ids);
   let rows: Row[] = contacts
     .filter((c) => allowedIds.has(c.id))
-    .map((c) => ({
-      id: c.id,
-      phone: c.phone,
-      name: c.name,
-      blocked: c.blocked,
-      last_read_at: c.last_read_at,
-      archived_at: c.archived_at,
-      needs_human: c.needs_human,
-      escalated_at: c.escalated_at,
-      channel: (c.channel ?? "whatsapp") as Channel,
-      lastMessage: lastByContact.get(c.id)?.content ?? null,
-      lastAt: lastByContact.get(c.id)?.created_at ?? null,
-      lastUserAt: lastUserByContact.get(c.id) ?? null,
-      score: scoreByContact.get(c.id) ?? null,
-      tags: tagsByContact.get(c.id) ?? [],
-    }));
+    .map((c) => {
+      const summary = summaryByContact.get(c.id);
+      return {
+        id: c.id,
+        phone: c.phone,
+        name: c.name,
+        blocked: c.blocked,
+        last_read_at: c.last_read_at,
+        archived_at: c.archived_at,
+        needs_human: c.needs_human,
+        escalated_at: c.escalated_at,
+        channel: (c.channel ?? "whatsapp") as Channel,
+        lastMessage: summary?.last_message_content ?? null,
+        lastAt: summary?.last_message_at ?? null,
+        lastUserAt: summary?.last_user_at ?? null,
+        score: summary?.latest_score ?? null,
+        tags: tagsByContact.get(c.id) ?? [],
+      };
+    });
 
   // Full-text search in messages content
   if (opts.query) {
@@ -238,15 +221,6 @@ export default async function ConversationsPage({
   const sp = await searchParams;
   const filter = (sp.filter ?? null) as FilterKey;
 
-  const sb = supabaseAdmin();
-  const { data: tags } = await sb.from("tags").select("*").order("name");
-
-  const rows = await getConversations({
-    query: sp.q,
-    filter,
-    tagId: sp.tag,
-  });
-
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <ListRefresher />
@@ -255,16 +229,47 @@ export default async function ConversationsPage({
           Bandeja
         </p>
         <h1 className="text-3xl font-medium tracking-display">Conversaciones</h1>
-        <p className="text-sm text-muted-foreground">
-          {rows.length} {rows.length === 1 ? "resultado" : "resultados"}
-        </p>
       </header>
 
+      <Suspense
+        key={`${sp.q ?? ""}|${filter ?? ""}|${sp.tag ?? ""}`}
+        fallback={<ConversationsSkeleton />}
+      >
+        <ConversationsContent
+          query={sp.q}
+          filter={filter}
+          tagId={sp.tag}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ConversationsContent({
+  query,
+  filter,
+  tagId,
+}: {
+  query?: string;
+  filter: FilterKey;
+  tagId?: string;
+}) {
+  const sb = supabaseAdmin();
+  const [{ data: tags }, rows] = await Promise.all([
+    sb.from("tags").select("*").order("name"),
+    getConversations({ query, filter, tagId }),
+  ]);
+
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">
+        {rows.length} {rows.length === 1 ? "resultado" : "resultados"}
+      </p>
       <FilterBar tags={(tags ?? []) as Tag[]} />
 
       {rows.length === 0 ? (
         <Card className="rounded-lg p-12 text-center text-sm text-muted-foreground">
-          {sp.q || filter || sp.tag
+          {query || filter || tagId
             ? "Sin resultados para los filtros aplicados."
             : "Sin conversaciones todavía. Mandá un mensaje al WhatsApp configurado."}
         </Card>
@@ -339,6 +344,29 @@ export default async function ConversationsPage({
           </ul>
         </Card>
       )}
+    </>
+  );
+}
+
+function ConversationsSkeleton() {
+  return (
+    <div className="animate-pulse space-y-6">
+      <div className="h-4 w-32 rounded bg-muted" />
+      <div className="h-9 w-full rounded bg-muted/60" />
+      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+        <ul className="divide-y divide-border">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <li key={i} className="flex items-center gap-4 px-5 py-4">
+              <div className="h-9 w-9 shrink-0 rounded-full bg-muted" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-40 rounded bg-muted" />
+                <div className="h-3 w-64 rounded bg-muted/70" />
+              </div>
+              <div className="h-3 w-10 rounded bg-muted" />
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

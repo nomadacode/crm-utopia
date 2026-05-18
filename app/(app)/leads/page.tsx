@@ -77,47 +77,32 @@ async function getLeads(opts: Search): Promise<{
   }
   const ids = contacts.map((c) => c.id);
 
-  // Step B: latest lead per contact + needs_human + last message timestamp + stages
-  const [leadsRes, contactsExtra, lastMsgs, stagesRes] = await Promise.all([
-    sb
-      .from("leads")
-      .select("contact_id, score, reason, qualified_at")
-      .in("contact_id", ids)
-      .order("qualified_at", { ascending: false }),
-    sb
-      .from("contacts")
-      .select("id, needs_human")
-      .in("id", ids),
-    sb
-      .from("messages")
-      .select("contact_id, created_at")
-      .in("contact_id", ids)
-      .order("created_at", { ascending: false }),
+  // Step B: latest lead per contact + needs_human + last message timestamp + stages.
+  // The summary RPC returns one row per contact computed via DISTINCT ON in
+  // Postgres, so we avoid streaming the full message/lead history.
+  type ContactSummary = {
+    contact_id: string;
+    last_message_content: string | null;
+    last_message_at: string | null;
+    last_user_at: string | null;
+    latest_score: "hot" | "warm" | "cold" | null;
+    latest_score_reason: string | null;
+    latest_qualified_at: string | null;
+  };
+
+  const [summaryRes, contactsExtra, stagesRes] = await Promise.all([
+    sb.rpc("contacts_summary", { p_contact_ids: ids }),
+    sb.from("contacts").select("id, needs_human").in("id", ids),
     sb.from("pipeline_stages").select("id, name, color"),
   ]);
 
-  const latestLeadByContact = new Map<
-    string,
-    { score: "hot" | "warm" | "cold"; reason: string; qualified_at: string }
-  >();
-  for (const l of leadsRes.data ?? []) {
-    if (!latestLeadByContact.has(l.contact_id)) {
-      latestLeadByContact.set(l.contact_id, {
-        score: l.score,
-        reason: l.reason,
-        qualified_at: l.qualified_at,
-      });
-    }
+  const summaryByContact = new Map<string, ContactSummary>();
+  for (const row of (summaryRes.data ?? []) as ContactSummary[]) {
+    summaryByContact.set(row.contact_id, row);
   }
   const needsHumanByContact = new Map<string, boolean>();
   for (const c of contactsExtra.data ?? []) {
     needsHumanByContact.set(c.id, c.needs_human);
-  }
-  const lastMsgByContact = new Map<string, string>();
-  for (const m of lastMsgs.data ?? []) {
-    if (!lastMsgByContact.has(m.contact_id)) {
-      lastMsgByContact.set(m.contact_id, m.created_at);
-    }
   }
   const stageById = new Map<string, { name: string; color: string }>();
   for (const s of stagesRes.data ?? []) {
@@ -125,7 +110,7 @@ async function getLeads(opts: Search): Promise<{
   }
 
   let rows: LeadRow[] = contacts.map((c) => {
-    const lead = latestLeadByContact.get(c.id);
+    const summary = summaryByContact.get(c.id);
     const stage = c.stage_id ? stageById.get(c.stage_id) : null;
     return {
       id: c.id,
@@ -139,11 +124,12 @@ async function getLeads(opts: Search): Promise<{
       stage_id: c.stage_id,
       stage_name: stage?.name ?? null,
       stage_color: stage?.color ?? "gray",
-      score: lead?.score ?? null,
-      score_reason: lead?.reason ?? null,
-      qualified_at: lead?.qualified_at ?? null,
+      score: summary?.latest_score ?? null,
+      score_reason: summary?.latest_score_reason ?? null,
+      qualified_at: summary?.latest_qualified_at ?? null,
       needs_human: needsHumanByContact.get(c.id) ?? false,
-      last_activity_at: lastMsgByContact.get(c.id) ?? c.created_at,
+      last_activity_at:
+        summary?.last_message_at ?? c.created_at,
     };
   });
 
