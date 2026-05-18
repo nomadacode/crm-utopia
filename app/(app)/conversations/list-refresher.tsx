@@ -5,9 +5,10 @@ import { useEffect, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 /**
- * Subscribes to new messages and triggers a router.refresh() when one arrives,
- * so the conversations list reflects new activity without a manual reload.
- * Debounced to 500ms to avoid hammering on burst inserts.
+ * Subscribes to any change that could affect the conversations list (new
+ * message, new lead classification, contact mutation like archive/bot toggle/
+ * escalation, or tag assignment) and triggers a debounced router.refresh().
+ * One channel with multiple .on() handlers keeps the WebSocket footprint low.
  */
 export function ListRefresher() {
   const router = useRouter();
@@ -18,8 +19,12 @@ export function ListRefresher() {
     let cancelled = false;
     let channelRef: ReturnType<typeof supabase.channel> | null = null;
 
+    function scheduleRefresh() {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => router.refresh(), 500);
+    }
+
     (async () => {
-      // Ensure auth is loaded so realtime uses the authenticated role
       try {
         const { data } = await supabase.auth.getSession();
         if (data.session?.access_token) {
@@ -35,10 +40,27 @@ export function ListRefresher() {
         .on(
           "postgres_changes" as never,
           { event: "INSERT", schema: "public", table: "messages" },
-          () => {
-            if (timer.current) clearTimeout(timer.current);
-            timer.current = setTimeout(() => router.refresh(), 500);
-          },
+          scheduleRefresh,
+        )
+        .on(
+          "postgres_changes" as never,
+          { event: "INSERT", schema: "public", table: "leads" },
+          scheduleRefresh,
+        )
+        .on(
+          "postgres_changes" as never,
+          { event: "UPDATE", schema: "public", table: "contacts" },
+          scheduleRefresh,
+        )
+        .on(
+          "postgres_changes" as never,
+          { event: "INSERT", schema: "public", table: "contact_tags" },
+          scheduleRefresh,
+        )
+        .on(
+          "postgres_changes" as never,
+          { event: "DELETE", schema: "public", table: "contact_tags" },
+          scheduleRefresh,
         )
         .subscribe();
     })();

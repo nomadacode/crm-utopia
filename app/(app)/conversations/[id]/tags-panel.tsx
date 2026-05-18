@@ -5,6 +5,15 @@ import { Card } from "@/components/ui/card";
 import { Check, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Tag } from "@/lib/types";
+import {
+  useRealtimeInserts,
+  useRealtimeDeletes,
+} from "@/lib/supabase/realtime";
+
+type ContactTagRow = {
+  contact_id: string;
+  tag_id: string;
+};
 
 const COLOR_CLASSES: Record<string, string> = {
   gray: "bg-zinc-200 text-zinc-700",
@@ -31,6 +40,30 @@ export function TagsPanel({
   const [pending, setPending] = useState<Set<string>>(new Set());
 
   const available = allTags.filter((t) => !assigned.some((a) => a.id === t.id));
+
+  // Reflect tag assignments performed elsewhere (bulk action from the
+  // conversations list, another agent, etc.) without a manual refresh.
+  // Tag metadata comes from allTags so realtime only carries the tag_id.
+  useRealtimeInserts<ContactTagRow>(
+    "contact_tags",
+    `contact_id=eq.${contactId}`,
+    (payload) => {
+      const tag = allTags.find((t) => t.id === payload.new.tag_id);
+      if (!tag) return;
+      setAssigned((prev) =>
+        prev.some((t) => t.id === tag.id) ? prev : [...prev, tag],
+      );
+    },
+  );
+
+  useRealtimeDeletes<ContactTagRow>(
+    "contact_tags",
+    `contact_id=eq.${contactId}`,
+    (payload) => {
+      const removedId = payload.old.tag_id;
+      setAssigned((prev) => prev.filter((t) => t.id !== removedId));
+    },
+  );
 
   async function toggleTag(tag: Tag, isAssigned: boolean) {
     setPending((p) => new Set(p).add(tag.id));

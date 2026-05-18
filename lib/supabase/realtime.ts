@@ -95,6 +95,54 @@ export function useRealtimeInserts<T>(
   }, [table, filter, handler]);
 }
 
+/**
+ * Subscribe to DELETE events. With `replica identity full`, `payload.old`
+ * contains the full deleted row so consumers can filter / locate it. The
+ * `payload.new` field is empty for DELETE events.
+ */
+export function useRealtimeDeletes<T>(
+  table: string,
+  filter: string | undefined,
+  onDelete: (payload: ChangePayload<T>) => void,
+) {
+  const handler = useLatestCallback(onDelete);
+
+  useEffect(() => {
+    const supabase = supabaseBrowser();
+    let cancelled = false;
+    let channelRef: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      await ensureRealtimeAuth(supabase);
+      if (cancelled) return;
+      const channelName = `${table}-deletes-${filter ?? "all"}-${Math.random().toString(36).slice(2, 7)}`;
+      dlog("subscribe DELETE", channelName, "filter:", filter);
+      channelRef = supabase
+        .channel(channelName)
+        .on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "postgres_changes" as any,
+          { event: "DELETE", schema: "public", table, filter },
+          (payload: ChangePayload<T>) => {
+            dlog("DELETE event", table, payload);
+            handler.current(payload);
+          },
+        )
+        .subscribe((status, err) => {
+          dlog("subscribe status", channelName, status, err?.message ?? "");
+        });
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channelRef) {
+        dlog("unsubscribe");
+        supabase.removeChannel(channelRef);
+      }
+    };
+  }, [table, filter, handler]);
+}
+
 export function useRealtimeUpdates<T>(
   table: string,
   filter: string | undefined,
