@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Columns,
+  Flame,
   Menu,
   MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Sparkles,
   TestTube2,
@@ -18,12 +21,21 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/conversations", label: "Conversaciones", icon: MessageCircle },
+  { href: "/leads", label: "Leads", icon: Flame },
   { href: "/pipeline", label: "Pipeline", icon: Columns },
   { href: "/test-chat", label: "Test chat", icon: TestTube2 },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 
-function NavList({ onNavigate }: { onNavigate?: () => void }) {
+const STORAGE_KEY = "utopia.sidebar.collapsed";
+
+function NavList({
+  collapsed = false,
+  onNavigate,
+}: {
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-1 flex-col gap-0.5">
@@ -36,15 +48,17 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             key={item.href}
             href={item.href}
             onClick={onNavigate}
+            title={collapsed ? item.label : undefined}
             className={cn(
-              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+              "flex items-center gap-2.5 rounded-md text-sm transition-colors",
+              collapsed ? "h-9 w-9 justify-center" : "px-2.5 py-2",
               active
                 ? "bg-foreground text-background"
                 : "text-foreground/80 hover:bg-sidebar-accent hover:text-foreground",
             )}
           >
-            <Icon className="h-4 w-4" />
-            {item.label}
+            <Icon className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="truncate">{item.label}</span>}
           </Link>
         );
       })}
@@ -52,22 +66,54 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function Brand() {
+function Brand({ collapsed = false }: { collapsed?: boolean }) {
   return (
-    <div className="flex items-center gap-2.5 px-2">
-      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-background">
+    <div
+      className={cn(
+        "flex items-center gap-2.5",
+        collapsed ? "justify-center" : "px-2",
+      )}
+    >
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
         <Sparkles className="h-3.5 w-3.5" />
       </div>
-      <div className="leading-tight">
-        <div className="text-sm font-medium">UtopIA</div>
-        <div className="text-[11px] text-muted-foreground">CRM</div>
-      </div>
+      {!collapsed && (
+        <div className="leading-tight">
+          <div className="text-sm font-medium">UtopIA</div>
+          <div className="text-[11px] text-muted-foreground">CRM</div>
+        </div>
+      )}
     </div>
   );
 }
 
 export function Sidebar() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // mobile drawer
+  const [collapsed, setCollapsed] = useState(false); // desktop collapse
+  const [hydrated, setHydrated] = useState(false);
+
+  // Restore collapsed state from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "1") setCollapsed(true);
+    } catch {
+      // ignore (private mode, etc.)
+    }
+    setHydrated(true);
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
 
   return (
     <>
@@ -108,12 +154,44 @@ export function Sidebar() {
         </>
       )}
 
-      {/* Desktop sidebar (visible >=md) */}
-      <aside className="hidden h-screen w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 md:flex">
-        <div className="mb-8">
-          <Brand />
+      {/* Desktop sidebar (>=md), collapsible */}
+      <aside
+        className={cn(
+          "hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar py-5 transition-[width] duration-200 md:flex",
+          collapsed ? "w-14 px-2" : "w-56 px-3",
+          // Avoid flash of wrong-width before hydration restores localStorage
+          !hydrated && "opacity-0",
+        )}
+      >
+        <div
+          className={cn(
+            "mb-8 flex items-center",
+            collapsed ? "justify-center" : "justify-between gap-2",
+          )}
+        >
+          <Brand collapsed={collapsed} />
+          {!collapsed && (
+            <button
+              onClick={toggleCollapsed}
+              aria-label="Colapsar barra lateral"
+              title="Colapsar"
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <NavList />
+        {collapsed && (
+          <button
+            onClick={toggleCollapsed}
+            aria-label="Expandir barra lateral"
+            title="Expandir"
+            className="mb-2 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
+        <NavList collapsed={collapsed} />
       </aside>
     </>
   );

@@ -21,6 +21,16 @@ export type Contact = {
   escalated_at: string | null;
   escalation_reason: EscalationReason | null;
   channel: Channel;
+  email: string | null;
+  company: string | null;
+  website: string | null;
+  instagram: string | null;
+  linkedin: string | null;
+  timeline: string | null;
+  pain_points: string | null;
+  main_goal: string | null;
+  profile_updated_at: string | null;
+  profile_enriching_until: string | null;
 };
 
 export type PipelineStage = {

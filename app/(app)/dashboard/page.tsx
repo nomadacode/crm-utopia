@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Card } from "@/components/ui/card";
 import { DashboardRefresher } from "./dashboard-refresher";
+import { RecentLeadsList } from "./recent-leads";
 
 export const dynamic = "force-dynamic";
 
@@ -16,14 +18,19 @@ type DashboardData = {
   recentConversations: RecentConv[];
 };
 
-type RecentLead = {
+export type LeadEntry = {
   id: string;
   score: "hot" | "warm" | "cold";
   reason: string;
   qualified_at: string;
+};
+
+export type RecentLead = {
   contact_id: string;
   contact_name: string | null;
   contact_phone: string;
+  current: LeadEntry;
+  history: LeadEntry[]; // newest first; current is history[0]
 };
 
 type RecentConv = {
@@ -46,34 +53,37 @@ async function getData(): Promise<DashboardData> {
     recentLeadsRes,
     recentMsgsRes,
   ] = await Promise.all([
-      supabase.from("contacts").select("id", { count: "exact", head: true }),
-      supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", since),
-      supabase.from("leads").select("score").gte("qualified_at", since),
-      supabase
-        .from("contacts")
-        .select("id", { count: "exact", head: true })
-        .eq("needs_human", true),
-      supabase
-        .from("leads")
-        .select(
-          "id, score, reason, qualified_at, contact_id, contact:contacts(name, phone)",
-        )
-        .order("qualified_at", { ascending: false })
-        .limit(5),
-      supabase
-        .from("messages")
-        .select(
-          "contact_id, content, created_at, contact:contacts(name, phone)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(20),
-    ]);
+    supabase.from("contacts").select("id", { count: "exact", head: true }),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", since),
+    supabase.from("leads").select("score").gte("qualified_at", since),
+    supabase
+      .from("contacts")
+      .select("id", { count: "exact", head: true })
+      .eq("needs_human", true),
+    supabase
+      .from("leads")
+      .select(
+        "id, score, reason, qualified_at, contact_id, contact:contacts(name, phone)",
+      )
+      .order("qualified_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("messages")
+      .select(
+        "contact_id, content, created_at, contact:contacts(name, phone)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
 
   const leads = leadsRes.data ?? [];
-  type RecentLeadRow = {
+
+  // Group leads by contact_id. Latest classification per contact = "current";
+  // older ones go into history. Show up to 5 unique contacts.
+  type RawLeadRow = {
     id: string;
     score: "hot" | "warm" | "cold";
     reason: string;
@@ -81,17 +91,30 @@ async function getData(): Promise<DashboardData> {
     contact_id: string;
     contact: { name: string | null; phone: string } | null;
   };
-  const recentLeads: RecentLead[] = (
-    (recentLeadsRes.data ?? []) as unknown as RecentLeadRow[]
-  ).map((l) => ({
-    id: l.id,
-    score: l.score,
-    reason: l.reason,
-    qualified_at: l.qualified_at,
-    contact_id: l.contact_id,
-    contact_name: l.contact?.name ?? null,
-    contact_phone: l.contact?.phone ?? "",
-  }));
+  const rawRows = (recentLeadsRes.data ?? []) as unknown as RawLeadRow[];
+  const groupedByContact = new Map<string, RecentLead>();
+  for (const r of rawRows) {
+    const entry: LeadEntry = {
+      id: r.id,
+      score: r.score,
+      reason: r.reason,
+      qualified_at: r.qualified_at,
+    };
+    const existing = groupedByContact.get(r.contact_id);
+    if (existing) {
+      existing.history.push(entry);
+    } else {
+      groupedByContact.set(r.contact_id, {
+        contact_id: r.contact_id,
+        contact_name: r.contact?.name ?? null,
+        contact_phone: r.contact?.phone ?? "",
+        current: entry,
+        history: [entry],
+      });
+    }
+  }
+  // Take top 5 unique contacts (already ordered by latest qualified_at)
+  const recentLeads: RecentLead[] = Array.from(groupedByContact.values()).slice(0, 5);
 
   const seen = new Set<string>();
   type RecentMsgRow = {
@@ -126,9 +149,7 @@ async function getData(): Promise<DashboardData> {
   };
 }
 
-export default async function DashboardPage() {
-  const d = await getData();
-
+export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-10">
       <DashboardRefresher />
@@ -142,6 +163,18 @@ export default async function DashboardPage() {
         </p>
       </header>
 
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
+    </div>
+  );
+}
+
+async function DashboardContent() {
+  const d = await getData();
+
+  return (
+    <>
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
         <Metric label="Contactos" value={d.totalContacts} />
         <Metric label="Mensajes" value={d.messagesWeek} />
@@ -164,31 +197,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Section title="Leads recientes" empty={d.recentLeads.length === 0}>
-          <ul className="divide-y divide-border">
-            {d.recentLeads.map((l) => (
-              <li key={l.id}>
-                <Link
-                  href={`/conversations/${l.contact_id}`}
-                  className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/50"
-                >
-                  <ScoreDot score={l.score} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {l.contact_name ?? l.contact_phone}
-                      </span>
-                      <span className="shrink-0 text-xs text-muted-foreground tabular">
-                        {formatRelative(l.qualified_at)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                      {l.reason}
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <RecentLeadsList leads={d.recentLeads} />
         </Section>
 
         <Section
@@ -221,6 +230,44 @@ export default async function DashboardPage() {
             ))}
           </ul>
         </Section>
+      </div>
+    </>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="animate-pulse space-y-10">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="space-y-2 bg-card px-4 py-5">
+            <div className="h-3 w-16 rounded bg-muted" />
+            <div className="h-7 w-12 rounded bg-muted" />
+          </div>
+        ))}
+      </section>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
+          >
+            <div className="border-b border-border px-5 py-3">
+              <div className="h-4 w-40 rounded bg-muted" />
+            </div>
+            <ul className="divide-y divide-border">
+              {Array.from({ length: 4 }).map((_, j) => (
+                <li key={j} className="flex items-start gap-3 px-5 py-3">
+                  <div className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-muted" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-32 rounded bg-muted" />
+                    <div className="h-3 w-52 rounded bg-muted/70" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </div>
   );

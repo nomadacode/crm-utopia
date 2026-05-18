@@ -166,6 +166,97 @@ export async function classifySentiment(
   }
 }
 
+export type LeadProfile = {
+  email: string | null;
+  company: string | null;
+  website: string | null;
+  instagram: string | null;
+  linkedin: string | null;
+  timeline: string | null;
+  pain_points: string | null;
+  main_goal: string | null;
+};
+
+/**
+ * Extract structured lead data from a conversation. Only returns fields where
+ * the LLM is confident; otherwise null. Caller should merge non-null fields
+ * into the existing contact record (don't overwrite existing values with null).
+ */
+export async function extractLeadProfile(
+  history: ChatMessage[],
+): Promise<LeadProfile> {
+  const conversation = history
+    .map((m) => `${m.role === "user" ? "Cliente" : "Asistente"}: ${m.content}`)
+    .join("\n");
+
+  const systemPrompt = `Analizás conversaciones de WhatsApp/Telegram entre un cliente y un asistente de ventas. Tu tarea es extraer información estructurada SOLO si el cliente la mencionó explícitamente o se puede inferir con ALTA confianza.
+
+Devolvé únicamente un JSON con estos campos (todos opcionales, usá null si no hay info clara):
+{
+  "email": string | null,           // email del cliente si lo mencionó
+  "company": string | null,         // nombre del negocio/empresa del cliente (ej: "Estudio Médico San Juan", "Pizzería Don Pepe")
+  "website": string | null,         // URL del sitio web (ej: "midominio.com.ar")
+  "instagram": string | null,       // handle de Instagram (ej: "@usuario") o URL
+  "linkedin": string | null,        // perfil de LinkedIn
+  "timeline": string | null,        // cuándo quiere implementar/comprar (texto breve, ej: "esta semana", "Q1 2027")
+  "pain_points": string | null,     // problema concreto que busca resolver (1-2 oraciones)
+  "main_goal": string | null        // qué quiere lograr (1-2 oraciones)
+}
+
+REGLAS:
+- Si el cliente NO mencionó algo, devolvé null. NO inventes.
+- Para campos de texto largo (pain_points, main_goal), resumí en español argentino, no copies palabras textuales.
+- Si la información es ambigua o de baja confianza, devolvé null.
+- Solo el JSON, sin markdown, sin texto adicional.`;
+
+  try {
+    const raw = await callOpenRouter(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Conversación:\n${conversation}` },
+      ],
+      { jsonMode: true },
+    );
+
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return emptyProfile();
+    const parsed = JSON.parse(match[0]) as Partial<LeadProfile>;
+    return {
+      email: cleanString(parsed.email),
+      company: cleanString(parsed.company),
+      website: cleanString(parsed.website),
+      instagram: cleanString(parsed.instagram),
+      linkedin: cleanString(parsed.linkedin),
+      timeline: cleanString(parsed.timeline),
+      pain_points: cleanString(parsed.pain_points),
+      main_goal: cleanString(parsed.main_goal),
+    };
+  } catch (err) {
+    console.error("[extractLeadProfile] failed", err);
+    return emptyProfile();
+  }
+}
+
+function emptyProfile(): LeadProfile {
+  return {
+    email: null,
+    company: null,
+    website: null,
+    instagram: null,
+    linkedin: null,
+    timeline: null,
+    pain_points: null,
+    main_goal: null,
+  };
+}
+
+function cleanString(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  if (!trimmed || trimmed.toLowerCase() === "null") return null;
+  return trimmed;
+}
+
 export async function classifyLead(
   history: ChatMessage[],
 ): Promise<{ score: LeadScore; reason: string }> {
