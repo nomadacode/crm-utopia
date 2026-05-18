@@ -1,23 +1,29 @@
-import Link from "next/link";
 import {
   listPresets,
   getBusinessProfile,
+  BUSINESS_FIELDS,
+  HANDOFF_FIELDS,
 } from "@/lib/utopia-prompt";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { PresetsManager } from "./presets-manager";
 import { BusinessForm } from "./business-form";
-import { Card } from "@/components/ui/card";
-import { Building2, Tag } from "lucide-react";
+import { TagsManager } from "./tags-manager";
+import { SettingsTabs } from "./settings-tabs";
+import type { Tag } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [presets, businessProfile] = await Promise.all([
+  const sb = supabaseAdmin();
+  const [presets, businessProfile, tagsRes] = await Promise.all([
     listPresets(),
     getBusinessProfile(),
+    sb.from("tags").select("*").order("name"),
   ]);
+  const tags = (tagsRes.data ?? []) as Tag[];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-1">
         <p className="text-xs uppercase tracking-wider text-muted-foreground">
           Configuración
@@ -28,38 +34,24 @@ export default async function SettingsPage() {
         </p>
       </header>
 
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">Información del negocio</h2>
-        </div>
-        <Card className="rounded-lg p-6">
-          <BusinessForm initialProfile={businessProfile} />
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Personalidad y reglas (presets)</h2>
-        <Card className="rounded-lg p-6">
-          <PresetsManager initialPresets={presets} />
-        </Card>
-      </section>
-
-      <Link
-        href="/settings/tags"
-        className="flex items-center justify-between rounded-lg border border-border bg-card px-5 py-4 transition-colors hover:bg-muted/50"
-      >
-        <div className="flex items-center gap-3">
-          <Tag className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <div className="text-sm font-medium">Tags</div>
-            <div className="text-xs text-muted-foreground">
-              Etiquetas que asignás a los contactos para organizar la bandeja.
-            </div>
-          </div>
-        </div>
-        <span className="text-xs text-muted-foreground">Administrar →</span>
-      </Link>
+      <SettingsTabs
+        negocio={
+          <BusinessForm
+            initialProfile={businessProfile}
+            fields={BUSINESS_FIELDS}
+            helpText="Esta información se inyecta automáticamente en cada respuesta de UtopIA. Solo aparece en lo que dice si la conversación lo amerita. Campos vacíos no se envían al modelo."
+          />
+        }
+        personalidad={<PresetsManager initialPresets={presets} />}
+        derivacion={
+          <BusinessForm
+            initialProfile={businessProfile}
+            fields={HANDOFF_FIELDS}
+            helpText="Las reglas de cuándo derivar son editables (campo de arriba). La señal técnica que el bot usa internamente para alertar al equipo está hardcodeada en el código — no se puede romper desde acá."
+          />
+        }
+        tags={<TagsManager initialTags={tags} />}
+      />
     </div>
   );
 }

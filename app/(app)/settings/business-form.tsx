@@ -6,20 +6,30 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  BUSINESS_PROFILE_FIELDS,
   type BusinessProfile,
+  type ProfileField,
 } from "@/lib/utopia-prompt";
 
 type FormState = Partial<Omit<BusinessProfile, "updated_at">>;
 
+/**
+ * Generic editor for a slice of business_profile. The fields prop decides
+ * which subset of the singleton row gets rendered (Negocio tab uses one
+ * group, Derivación tab uses another), so a single form component covers
+ * both surfaces.
+ */
 export function BusinessForm({
   initialProfile,
+  fields,
+  helpText,
 }: {
   initialProfile: BusinessProfile | null;
+  fields: ProfileField[];
+  helpText?: string;
 }) {
   const [form, setForm] = useState<FormState>(() => {
     const init: FormState = {};
-    for (const { key } of BUSINESS_PROFILE_FIELDS) {
+    for (const { key } of fields) {
       init[key] = initialProfile?.[key] ?? "";
     }
     return init;
@@ -48,7 +58,7 @@ export function BusinessForm({
 
   return (
     <div className="space-y-5">
-      {BUSINESS_PROFILE_FIELDS.map(({ key, label, placeholder, rows }) => {
+      {fields.map(({ key, label, placeholder, rows }) => {
         const id = `bp-${key}`;
         const value = (form[key] as string | null | undefined) ?? "";
         return (
@@ -82,7 +92,7 @@ export function BusinessForm({
 
       <div className="flex items-center gap-3 border-t border-border pt-4">
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar información"}
+          {saving ? "Guardando…" : "Guardar"}
         </Button>
         {savedAt && (
           <span className="text-xs text-muted-foreground tabular">
@@ -91,12 +101,11 @@ export function BusinessForm({
         )}
       </div>
 
-      <p className="rounded-md bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-        <strong className="text-foreground">Cómo se usa:</strong> esta información se
-        inyecta automáticamente en cada respuesta de UtopIA. Solo aparecerá en lo que
-        UtopIA dice si la conversación lo amerita (UtopIA decide cuándo es relevante
-        usarla). Los campos vacíos no se envían al modelo.
-      </p>
+      {helpText && (
+        <p className="rounded-md bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+          {helpText}
+        </p>
+      )}
     </div>
   );
 }
