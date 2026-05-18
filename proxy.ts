@@ -54,6 +54,24 @@ export async function proxy(req: NextRequest) {
     return new NextResponse("403 — Email no autorizado", { status: 403 });
   }
 
+  // Soft-revoke: admins can flip is_active=false in user_profiles to lock a
+  // user out without deleting their auth row (preserves audit trail). The
+  // RLS policy on user_profiles lets the authenticated role read its own row.
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("is_active")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (profile?.is_active === false) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("error", "deactivated");
+    // Clear the session before redirecting so the user has to log in again
+    // even if an admin re-activates them.
+    await supabase.auth.signOut();
+    return NextResponse.redirect(url);
+  }
+
   return response;
 }
 
