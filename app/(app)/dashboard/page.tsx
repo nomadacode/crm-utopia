@@ -58,7 +58,11 @@ async function getData(): Promise<DashboardData> {
       .from("messages")
       .select("id", { count: "exact", head: true })
       .gte("created_at", since),
-    supabase.from("leads").select("score").gte("qualified_at", since),
+    supabase
+      .from("leads")
+      .select("contact_id, score, qualified_at")
+      .gte("qualified_at", since)
+      .order("qualified_at", { ascending: false }),
     supabase
       .from("contacts")
       .select("id", { count: "exact", head: true })
@@ -79,7 +83,21 @@ async function getData(): Promise<DashboardData> {
       .limit(50),
   ]);
 
-  const leads = leadsRes.data ?? [];
+  // Dedupe lead classifications by contact: keep only the latest within the
+  // window. A single contact can be classified multiple times during a
+  // conversation; the dashboard counters track distinct contacts, not events.
+  type LeadCountRow = {
+    contact_id: string;
+    score: "hot" | "warm" | "cold";
+    qualified_at: string;
+  };
+  const latestByContact = new Map<string, "hot" | "warm" | "cold">();
+  for (const l of (leadsRes.data ?? []) as LeadCountRow[]) {
+    if (!latestByContact.has(l.contact_id)) {
+      latestByContact.set(l.contact_id, l.score);
+    }
+  }
+  const latestScores = Array.from(latestByContact.values());
 
   // Group leads by contact_id. Latest classification per contact = "current";
   // older ones go into history. Show up to 5 unique contacts.
@@ -140,9 +158,9 @@ async function getData(): Promise<DashboardData> {
   return {
     totalContacts: contactsRes.count ?? 0,
     messagesWeek: messagesRes.count ?? 0,
-    hot: leads.filter((l) => l.score === "hot").length,
-    warm: leads.filter((l) => l.score === "warm").length,
-    cold: leads.filter((l) => l.score === "cold").length,
+    hot: latestScores.filter((s) => s === "hot").length,
+    warm: latestScores.filter((s) => s === "warm").length,
+    cold: latestScores.filter((s) => s === "cold").length,
     needsHuman: needsHumanRes.count ?? 0,
     recentLeads,
     recentConversations,
