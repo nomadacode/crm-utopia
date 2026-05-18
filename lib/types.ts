@@ -1,6 +1,10 @@
 export type Channel = "whatsapp" | "telegram";
 
-export type EscalationReason = "explicit_request" | "frustration" | "manual";
+export type EscalationReason =
+  | "explicit_request"
+  | "frustration"
+  | "manual"
+  | "bot_initiated";
 
 export type Contact = {
   id: string;

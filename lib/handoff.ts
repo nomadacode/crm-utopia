@@ -10,6 +10,7 @@ const REASON_LABEL: Record<EscalationReason, string> = {
   explicit_request: "Pidió hablar con un humano explícitamente",
   frustration: "Expresó frustración o queja",
   manual: "Escalado manualmente desde el CRM",
+  bot_initiated: "UtopIA decidió derivar a un humano",
 };
 
 /**

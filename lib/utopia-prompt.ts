@@ -164,6 +164,24 @@ export function formatBusinessContext(profile: BusinessProfile | null): string {
 }
 
 /**
+ * Always-on instructions for how the assistant signals it is escalating.
+ * Injected into every prompt regardless of the active preset, so any handoff
+ * decision flips the contact to needs_human in the CRM and notifies the team.
+ * The token is stripped from the outgoing message before the customer sees it.
+ */
+const HANDOFF_PROTOCOL = `PROTOCOLO DE DERIVACIÓN A HUMANO (CRÍTICO — NO LO IGNORES):
+
+Cuando vas a derivar al cliente a un humano —sea porque te lo pide, porque expresa frustración, porque no podés ayudarlo, o porque la consulta excede lo que sabés del negocio— DEBÉS terminar tu respuesta con el token literal en mayúsculas y entre dobles corchetes:
+
+[[HANDOFF]]
+
+Reglas:
+- El token NO se le muestra al cliente: lo usa el sistema internamente para alertar al equipo.
+- Incluí el token SOLO cuando realmente vas a derivar. Si solo decís "esperá un momento" o "buena pregunta", no lo pongas.
+- Tu mensaje debe igualmente comunicarle al cliente, con tus palabras, que un humano lo va a contactar (no le digas "[[HANDOFF]]" ni nada parecido — usá lenguaje natural).
+- Si dudás entre derivar o no, derivá (mejor que un humano confirme).`;
+
+/**
  * Build the final system prompt: business context + active preset, with
  * per-contact variables applied.
  */
@@ -179,8 +197,10 @@ export async function buildSystemPrompt(
   ]);
   const businessBlock = formatBusinessContext(profile);
   const personalityWithVars = applyVariables(presetTemplate, contact);
-  if (!businessBlock) return personalityWithVars;
-  return `${businessBlock}\n\n---\n\n${personalityWithVars}`;
+  const main = businessBlock
+    ? `${businessBlock}\n\n---\n\n${personalityWithVars}`
+    : personalityWithVars;
+  return `${main}\n\n---\n\n${HANDOFF_PROTOCOL}`;
 }
 
 /** Replace {{variables}} in the prompt with values from the contact + context. */
