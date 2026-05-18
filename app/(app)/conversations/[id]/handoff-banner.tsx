@@ -11,6 +11,7 @@ const REASON_LABEL: Record<EscalationReason, string> = {
   explicit_request: "El cliente pidió hablar con un humano",
   frustration: "El cliente expresó frustración",
   manual: "Escalado manualmente desde el CRM",
+  bot_initiated: "UtopIA decidió derivar — no pudo resolver la consulta",
 };
 
 function timeAgo(iso: string, now: number): string {

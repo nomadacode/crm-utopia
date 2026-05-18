@@ -20,6 +20,7 @@ export type BusinessProfile = {
   hours: string | null;
   calendar_link: string | null;
   handoff_info: string | null;
+  handoff_protocol: string | null;
   additional_context: string | null;
   updated_at: string;
 };
@@ -77,6 +78,13 @@ export const BUSINESS_PROFILE_FIELDS: Array<{
     rows: 2,
   },
   {
+    key: "handoff_protocol",
+    label: "Reglas de derivación a humano",
+    placeholder:
+      "Cuándo UtopIA debe derivar y cómo comunicarlo. Si lo dejás vacío se usan las reglas por defecto.",
+    rows: 10,
+  },
+  {
     key: "additional_context",
     label: "Contexto adicional",
     placeholder:
@@ -114,7 +122,7 @@ export async function getBusinessProfile(): Promise<BusinessProfile | null> {
   const { data } = await supabase
     .from("business_profile")
     .select(
-      "business_name, description, services, prices, hours, calendar_link, handoff_info, additional_context, updated_at",
+      "business_name, description, services, prices, hours, calendar_link, handoff_info, handoff_protocol, additional_context, updated_at",
     )
     .eq("id", 1)
     .maybeSingle();
@@ -164,8 +172,46 @@ export function formatBusinessContext(profile: BusinessProfile | null): string {
 }
 
 /**
- * Build the final system prompt: business context + active preset, with
- * per-contact variables applied.
+ * Default WHEN/HOW rules used if business_profile.handoff_protocol is empty.
+ * Kept in sync with the seed in migration `business_profile_handoff_protocol`
+ * — that migration writes the same text on first install so it shows up
+ * editable in /settings. This constant is the safety net for the case where
+ * the user clears the field.
+ */
+export const DEFAULT_HANDOFF_RULES = `Derivá al cliente a un humano cuando:
+- El cliente pide hablar con una persona / asesor / vendedor / humano explícitamente.
+- El cliente expresa frustración, enojo o queja seria.
+- No podés resolver la consulta con la info del negocio que tenés cargada.
+- La consulta excede tu scope (temas legales, médicos, técnicos específicos, etc.).
+- Detectás que el cliente está confundido después de varios intentos tuyos por aclarar.
+
+Cuando derivás, comunicale al cliente con tus palabras (en español argentino, voseo, natural) que un humano del equipo lo va a contactar en breve. Si "Qué hacer si hay que derivar a un humano" tiene info cargada arriba, usala.
+
+Ante la duda, derivá. Mejor que un humano confirme.`;
+
+/**
+ * Non-configurable technical contract: how the assistant signals an escalation
+ * decision to the CRM. Always appended in code so the user can't accidentally
+ * break the contact-flag-and-notify path by editing /settings.
+ */
+const HANDOFF_TOKEN_INSTRUCTION = `SEÑAL TÉCNICA DE DERIVACIÓN (no editable, no negociable):
+
+Cuando, siguiendo las reglas anteriores, decidís derivar al cliente, tu respuesta DEBE terminar con el siguiente token literal en mayúsculas y entre dobles corchetes:
+
+[[HANDOFF]]
+
+- El token NO se le muestra al cliente. El sistema lo strippea antes de enviar y lo usa para marcar al contacto como "necesita humano" y avisar al equipo.
+- Incluí el token SOLO cuando realmente vas a derivar.
+- Tu mensaje al cliente debe igualmente comunicarle, con lenguaje natural, que va a hablar con una persona del equipo. NUNCA escribas literalmente "[[HANDOFF]]" en tu respuesta visible — el token va aparte, al final.`;
+
+function buildHandoffSection(customRules: string | null | undefined): string {
+  const rules = (customRules?.trim() ? customRules.trim() : DEFAULT_HANDOFF_RULES);
+  return `PROTOCOLO DE DERIVACIÓN A HUMANO:\n\n${rules}\n\n${HANDOFF_TOKEN_INSTRUCTION}`;
+}
+
+/**
+ * Build the final system prompt: business context + active preset + handoff
+ * protocol, with per-contact variables applied.
  */
 export async function buildSystemPrompt(
   contact: Pick<Contact, "name" | "phone"> & {
@@ -179,8 +225,11 @@ export async function buildSystemPrompt(
   ]);
   const businessBlock = formatBusinessContext(profile);
   const personalityWithVars = applyVariables(presetTemplate, contact);
-  if (!businessBlock) return personalityWithVars;
-  return `${businessBlock}\n\n---\n\n${personalityWithVars}`;
+  const handoffSection = buildHandoffSection(profile?.handoff_protocol);
+  const main = businessBlock
+    ? `${businessBlock}\n\n---\n\n${personalityWithVars}`
+    : personalityWithVars;
+  return `${main}\n\n---\n\n${handoffSection}`;
 }
 
 /** Replace {{variables}} in the prompt with values from the contact + context. */

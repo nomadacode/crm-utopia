@@ -265,9 +265,19 @@ export async function processInboundMessage(input: ProcessedInbound): Promise<vo
     lastUserMessageAt: prevUserMsg?.created_at ?? null,
   });
 
-  // 13) Generate + sanitize reply
+  // 13) Generate + sanitize reply.
+  // Before sanitizing, detect whether the assistant signaled a handoff.
+  // Primary signal: the explicit [[HANDOFF]] token instructed by the prompt.
+  // Fallback: natural-language patterns the bot tends to emit when escalating
+  // — defense in depth for the (rare) case where the model forgets the token.
   const rawReply = await generateReply(systemPrompt, history);
-  const reply = sanitizeReply(rawReply);
+  const HANDOFF_TOKEN_RE = /\[\[HANDOFF\]\]/gi;
+  const HANDOFF_INTENT_RE =
+    /(te\s+(deriv\w*|paso\s+con|aviso\s+al\s+equipo))|(\bun(a)?\s+(humano|persona|asesor|agente|operador|vendedor)\s+(te|del\s+equipo))|(el\s+equipo\s+te\s+(contacta|escribe|llama|llamará|escribirá))/i;
+  const botWantsHandoff =
+    HANDOFF_TOKEN_RE.test(rawReply) || HANDOFF_INTENT_RE.test(rawReply);
+  const replyWithoutToken = rawReply.replace(HANDOFF_TOKEN_RE, "").trim();
+  const reply = sanitizeReply(replyWithoutToken);
 
   // 14) Send reply via the right channel
   let externalReplyId: string | null = null;
@@ -303,6 +313,23 @@ export async function processInboundMessage(input: ProcessedInbound): Promise<vo
     .from("contacts")
     .update({ typing_until: null })
     .eq("id", contact.id);
+
+  // 15.5) Bot-initiated handoff: the assistant decided to escalate on its own.
+  // Mark the contact as needs_human + notify the team, so the alert isn't lost
+  // when the LLM (not the user-side classifier) is the one calling it.
+  if (botWantsHandoff) {
+    console.log("[handoff] bot-initiated escalation for", contact.phone);
+    const { wasAlreadyEscalated } = await escalateContact(
+      supabase,
+      contact.id,
+      "bot_initiated",
+    );
+    if (!wasAlreadyEscalated) {
+      after(() =>
+        notifyOwnerOfHandoff(contact, "bot_initiated", input.content),
+      );
+    }
+  }
 
   // 16) After-response background work: classify lead + sentiment + extract profile
   after(async () => {
