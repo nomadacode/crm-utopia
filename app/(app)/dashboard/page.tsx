@@ -16,6 +16,18 @@ type DashboardData = {
   needsHuman: number;
   recentLeads: RecentLead[];
   recentConversations: RecentConv[];
+  responseTimes: ResponseTimeStats;
+};
+
+type ResponseTimeStats = {
+  bot_count: number;
+  bot_median_seconds: number | null;
+  bot_p95_seconds: number | null;
+  bot_within_5min_pct: number | null;
+  human_count: number;
+  human_median_seconds: number | null;
+  human_p95_seconds: number | null;
+  human_within_5min_pct: number | null;
 };
 
 export type LeadEntry = {
@@ -52,6 +64,7 @@ async function getData(): Promise<DashboardData> {
     needsHumanRes,
     recentLeadsRes,
     recentMsgsRes,
+    responseTimeRes,
   ] = await Promise.all([
     supabase.from("contacts").select("id", { count: "exact", head: true }),
     supabase
@@ -81,6 +94,7 @@ async function getData(): Promise<DashboardData> {
       )
       .order("created_at", { ascending: false })
       .limit(50),
+    supabase.rpc("response_time_metrics", { p_since: since }),
   ]);
 
   // Dedupe lead classifications by contact: keep only the latest within the
@@ -155,6 +169,35 @@ async function getData(): Promise<DashboardData> {
     if (recentConversations.length >= 5) break;
   }
 
+  // The RPC returns a single row; supabase-js wraps it in an array.
+  type RawResponseRow = {
+    bot_count: number | string | null;
+    bot_median_seconds: string | number | null;
+    bot_p95_seconds: string | number | null;
+    bot_within_5min_pct: string | number | null;
+    human_count: number | string | null;
+    human_median_seconds: string | number | null;
+    human_p95_seconds: string | number | null;
+    human_within_5min_pct: string | number | null;
+  };
+  const rawRt = ((responseTimeRes.data ?? []) as RawResponseRow[])[0];
+  // Postgres numeric comes over the wire as a string; coerce.
+  const numOrNull = (v: string | number | null | undefined): number | null => {
+    if (v == null) return null;
+    const n = typeof v === "string" ? Number(v) : v;
+    return Number.isFinite(n) ? n : null;
+  };
+  const responseTimes: ResponseTimeStats = {
+    bot_count: Number(rawRt?.bot_count ?? 0),
+    bot_median_seconds: numOrNull(rawRt?.bot_median_seconds),
+    bot_p95_seconds: numOrNull(rawRt?.bot_p95_seconds),
+    bot_within_5min_pct: numOrNull(rawRt?.bot_within_5min_pct),
+    human_count: Number(rawRt?.human_count ?? 0),
+    human_median_seconds: numOrNull(rawRt?.human_median_seconds),
+    human_p95_seconds: numOrNull(rawRt?.human_p95_seconds),
+    human_within_5min_pct: numOrNull(rawRt?.human_within_5min_pct),
+  };
+
   return {
     totalContacts: contactsRes.count ?? 0,
     messagesWeek: messagesRes.count ?? 0,
@@ -164,6 +207,7 @@ async function getData(): Promise<DashboardData> {
     needsHuman: needsHumanRes.count ?? 0,
     recentLeads,
     recentConversations,
+    responseTimes,
   };
 }
 
@@ -212,6 +256,8 @@ async function DashboardContent() {
           </div>
         </Link>
       </section>
+
+      <ResponseTimeSection stats={d.responseTimes} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Section title="Leads recientes" empty={d.recentLeads.length === 0}>
@@ -264,6 +310,20 @@ function DashboardSkeleton() {
           </div>
         ))}
       </section>
+      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+        <div className="border-b border-border px-5 py-3">
+          <div className="h-4 w-40 rounded bg-muted" />
+        </div>
+        <div className="space-y-2 px-5 py-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="h-3 flex-1 rounded bg-muted/70" />
+              <div className="h-3 w-12 rounded bg-muted" />
+              <div className="h-3 w-12 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-6 lg:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
           <div
@@ -352,6 +412,100 @@ function ScoreDot({
   }[score];
   const sz = size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2 mt-1.5";
   return <span className={`${sz} ${cls} inline-block shrink-0 rounded-full`} />;
+}
+
+function ResponseTimeSection({ stats }: { stats: ResponseTimeStats }) {
+  const hasAny = stats.bot_count > 0 || stats.human_count > 0;
+  return (
+    <Card className="overflow-hidden rounded-lg p-0">
+      <div className="border-b border-border px-5 py-3">
+        <h2 className="text-sm font-medium">Tiempo de respuesta</h2>
+      </div>
+      {!hasAny ? (
+        <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+          Todavía no hay suficientes respuestas para medir.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                <th className="px-5 py-2.5 font-medium"></th>
+                <th className="px-3 py-2.5 font-medium">UtopIA</th>
+                <th className="px-3 py-2.5 font-medium">Humano</th>
+              </tr>
+            </thead>
+            <tbody>
+              <ResponseTimeRow
+                label="Mediano"
+                bot={formatDuration(stats.bot_median_seconds)}
+                human={formatDuration(stats.human_median_seconds)}
+              />
+              <ResponseTimeRow
+                label="P95"
+                bot={formatDuration(stats.bot_p95_seconds)}
+                human={formatDuration(stats.human_p95_seconds)}
+              />
+              <ResponseTimeRow
+                label="Respondidos en <5 min"
+                bot={formatPercent(stats.bot_within_5min_pct)}
+                human={formatPercent(stats.human_within_5min_pct)}
+              />
+              <ResponseTimeRow
+                label="Total respuestas"
+                bot={stats.bot_count.toString()}
+                human={stats.human_count.toString()}
+              />
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ResponseTimeRow({
+  label,
+  bot,
+  human,
+}: {
+  label: string;
+  bot: string;
+  human: string;
+}) {
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-5 py-3 text-sm text-muted-foreground">{label}</td>
+      <td className="px-3 py-3 text-sm font-medium tabular">{bot}</td>
+      <td className="px-3 py-3 text-sm font-medium tabular">{human}</td>
+    </tr>
+  );
+}
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return "—";
+  if (seconds < 1) return "<1s";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const totalMin = Math.floor(seconds / 60);
+  const remSec = Math.round(seconds % 60);
+  if (totalMin < 60) {
+    return remSec > 0 && totalMin < 10 ? `${totalMin}m ${remSec}s` : `${totalMin}m`;
+  }
+  const totalHr = Math.floor(totalMin / 60);
+  const remMin = totalMin % 60;
+  if (totalHr < 24) {
+    return remMin > 0 ? `${totalHr}h ${remMin}m` : `${totalHr}h`;
+  }
+  const totalDay = Math.floor(totalHr / 24);
+  const remHr = totalHr % 24;
+  return remHr > 0 ? `${totalDay}d ${remHr}h` : `${totalDay}d`;
+}
+
+function formatPercent(pct: number | null): string {
+  if (pct == null) return "—";
+  // Hide the decimal when it's a clean integer (e.g. "100%" vs "100.0%")
+  const rounded = Math.round(pct * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
 
 function Avatar({ name }: { name: string }) {
