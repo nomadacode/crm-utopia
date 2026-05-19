@@ -64,7 +64,7 @@ function formatRelative(iso: string | null): string {
   if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d`;
-  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+  return date.toLocaleDateString("es-AR", { day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" });
 }
 
 export function ConversationList({
