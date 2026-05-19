@@ -274,6 +274,7 @@ export default async function LeadsPage({
                       {new Date(row.last_activity_at).toLocaleDateString("es-AR", {
                         day: "2-digit",
                         month: "short",
+                        timeZone: "America/Argentina/Buenos_Aires",
                       })}
                     </td>
                   </tr>

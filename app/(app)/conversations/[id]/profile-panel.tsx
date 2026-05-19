@@ -209,7 +209,7 @@ export function ProfilePanel({
           </span>
         ) : updatedAt ? (
           <span className="text-[10px] text-muted-foreground tabular">
-            actualizado · {new Date(updatedAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}
+            actualizado · {new Date(updatedAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short", timeZone: "America/Argentina/Buenos_Aires" })}
           </span>
         ) : null}
       </div>
