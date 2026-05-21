@@ -27,6 +27,13 @@ export async function GET(req: NextRequest) {
 
 // POST — Incoming WhatsApp events (messages or statuses).
 export async function POST(req: NextRequest) {
+  // WhatsApp no está configurado todavía (no hay WABA). Mantenemos esta ruta
+  // pública inerte hasta conectar credenciales. Al habilitar WhatsApp, reemplazar
+  // este guard por la verificación de la firma X-Hub-Signature-256 de Meta.
+  if (!process.env.WHATSAPP_ACCESS_TOKEN) {
+    return new NextResponse("not found", { status: 404 });
+  }
+
   const body = await req.json();
   console.log("[wa-webhook] POST", JSON.stringify(body).slice(0, 500));
   try {
